@@ -38,3 +38,16 @@ class ShellTests(TestCase):
         self.assertNotContains(r, "lenis")          # Lenis dibuang
         self.assertNotContains(r, "fonts.googleapis") # Google Fonts dibuang
         self.assertContains(r, 'class="folio"')
+
+
+class DashboardUiTests(TestCase):
+    def setUp(self):
+        self.toko = Toko.objects.filter(is_active=True).first() or Toko.objects.create(key="lbs", name="LBS", is_active=True)
+        self.admin = get_user_model().objects.create_superuser("uiadmin2", password="rahasia-123")
+        self.client.force_login(self.admin)
+
+    def test_dashboard_folio_dan_rail(self):
+        r = self.client.get("/")
+        self.assertContains(r, "DASBOR")
+        self.assertContains(r, "hrail")
+        self.assertIn("batches", r.context)

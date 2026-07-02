@@ -2,6 +2,7 @@
 {% load humanize %}
 {% block title %}Dashboard · Truth of Auditor{% endblock %}
 {% block crumb %}Dashboard{% endblock %}
+{% block folio %}<b>01</b>DASBOR{% endblock %}
 {% block content %}
 <div class="page-head reveal">
   <h1>Dashboard</h1>
@@ -28,6 +29,22 @@
     <div class="top"><span class="k">Jenis Sumber</span>
       <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span></div>
     <div class="v num" data-count="{{ by_source|length }}">{{ by_source|length }}</div>
+  </div>
+</div>
+
+<div class="card reveal" style="margin-top:16px;margin-bottom:16px">
+  <div class="h-row"><h3>Batch Rekonsiliasi Terakhir</h3><span class="margin-note">arsip · geser →</span></div>
+  <div class="hrail">
+    {% for b in batches %}
+    <a class="card" href="{% url 'batch_detail' b.pk %}" style="box-shadow:none">
+      <div class="muted" style="font-size:12px">Batch <span class="num">#{{ b.pk }}</span></div>
+      <div class="num" style="font-size:20px;font-weight:500;margin:6px 0">{{ b.date_from|date:"d M" }}–{{ b.date_to|date:"d M Y" }}</div>
+      {% with s=b.summary %}
+      <span class="badge ok">{{ s.buckets.cocok|default:0 }} cocok</span>
+      <span class="badge warn">{{ s.buckets.perlu_tinjau|default:0 }} tinjau</span>
+      {% endwith %}
+    </a>
+    {% empty %}<span class="muted">Belum ada batch.</span>{% endfor %}
   </div>
 </div>
 

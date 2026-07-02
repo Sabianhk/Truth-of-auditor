@@ -58,6 +58,7 @@ def dashboard(request):
         "by_source": by_source,
         "uploads": uploads.select_related("source_type").order_by("-id")[:8],
         "runs": runs.order_by("-id")[:8],
+        "batches": ReconBatch.objects.filter(toko=active).order_by("-id")[:10],
     }
     return render(request, "web/dashboard.html", ctx)
 
