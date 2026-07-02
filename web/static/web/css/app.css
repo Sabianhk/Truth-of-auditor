@@ -7,7 +7,7 @@
 /* ---- A. TOKENS ---- */
 :root{
   --bg:#EDE9DE; --panel:#F7F5EE; --panel-2:#F1EDE2;
-  --ink:#1C1A15; --muted:#5C574B; --faint:#8A8474;
+  --ink:#1C1A15; --muted:#5C574B; --faint:#6E6858;
   --line:rgba(28,26,21,.14); --line-2:rgba(28,26,21,.24);
   --side:#161511; --side-2:#1E1C16; --side-ink:#E9E4D6; --side-muted:#8A8474;
   --brand:#2E7D5B; --brand-2:#B3362A; --grad:none;
