@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.test import TestCase
+from django.urls import reverse
 
 from sources.models import Toko
 
@@ -23,6 +24,14 @@ class StaticAssetTests(TestCase):
     def test_app_css_ditemukan(self):
         self.assertIsNotNone(finders.find("web/css/app.css"))
 
+
+class LoginUiTests(TestCase):
+    def test_login_pakai_hero_baru(self):
+        r = self.client.get(reverse("login"))
+        self.assertContains(r, "login-hero.js")
+        self.assertContains(r, "importmap")
+        self.assertNotContains(r, "three.js/r128")   # UMD lama dibuang
+        self.assertNotContains(r, "lenis")
 
 class ShellTests(TestCase):
     def setUp(self):

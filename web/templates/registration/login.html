@@ -1,25 +1,23 @@
 {% extends "web/base.html" %}
+{% load static %}
 {% block title %}Masuk · Truth of Auditor{% endblock %}
 
 {% block head %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="stylesheet" href="{% static 'web/css/login.css' %}">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js"}}</script>
 <style>
   body{overflow:hidden}
-  /* fallback gradient jika WebGL gagal */
-  #gl{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;display:block;
-    background:radial-gradient(70% 60% at 30% 72%,#2a2350,#0a0a14 60%),radial-gradient(60% 50% at 80% 30%,#123a44,#07080c 70%)}
-  .veil{position:fixed;inset:0;z-index:1;background:radial-gradient(1000px 620px at 50% 120%,rgba(7,8,12,.15),rgba(7,8,12,.82))}
   .auth{position:relative;z-index:2;min-height:100vh;display:grid;place-items:center;padding:24px}
-  .auth-card{width:100%;max-width:415px;background:rgba(10,12,18,.74);backdrop-filter:blur(26px);
-    border:1px solid var(--border2);border-radius:22px;padding:38px 34px;
-    box-shadow:0 44px 130px -30px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.07)}
-  .auth-card .brand{display:flex;align-items:center;gap:11px;font-family:'Space Grotesk';font-weight:700;font-size:19px}
+  .auth-card{width:100%;max-width:415px;background:rgba(18,15,11,.82);backdrop-filter:blur(14px);
+    border:1px solid var(--border2);border-radius:var(--radius);padding:38px 34px;
+    box-shadow:0 44px 130px -30px rgba(0,0,0,.85),inset 0 1px 0 rgba(233,228,214,.06)}
+  .auth-card .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:19px}
   .auth-card h1{font-size:28px;margin:22px 0 8px;line-height:1.14;overflow:hidden}
   .auth-card h1 .kin{display:inline-block}
   .auth-card .sub{color:var(--muted);font-size:14.5px;margin:0 0 26px}
   .auth-card .btn.primary{width:100%;justify-content:center;padding:13px;font-size:15px;margin-top:6px}
-  .err{background:rgba(251,113,133,.12);color:#ffa7b4;border:1px solid rgba(251,113,133,.3);
-    padding:10px 13px;border-radius:10px;font-size:13px;margin-bottom:16px}
+  .err{background:rgba(208,106,92,.12);color:#E8A493;border:1px solid rgba(208,106,92,.35);
+    padding:10px 13px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:16px}
   .foot{margin-top:20px;text-align:center;font-size:12.5px;color:var(--faint)}
 </style>
 {% endblock %}
@@ -27,7 +25,7 @@
 {% block chrome %}{% endblock %}
 {% block main %}
 <canvas id="gl"></canvas>
-<div class="veil"></div>
+<div id="wordmark-fallback" class="wm-fallback" aria-hidden="true">TRUTH OF AUDITOR</div>
 <div class="auth">
   <div class="auth-card" id="card">
     <div class="brand"><span class="dot"></span> Truth<span class="grad-text">Auditor</span></div>
@@ -44,64 +42,7 @@
     <div class="foot">Truth of Auditor · rekonsiliasi keuangan</div>
   </div>
 </div>
-
-<script>
-/* ───────────────────────────────────────────────────────────────
- * build-premium-website-twist-threejs — random roll (this round)
- *   WebGL effect : Particle field reacting to cursor   (trend-confirmed: GPGPU/points parallax, awwwards staple)
- *   Motion       : Lenis smooth scroll · Magnetic buttons / cursor-following
- *   Visual       : Glassmorphism
- *   Anchor       : Stripe-level polish
- *   Adapted to   : existing Django "Truth of Auditor" login (Django templates + Three.js/GSAP CDN)
- *   Date         : 2026-07-02
- * ─────────────────────────────────────────────────────────────── */
-(function(){
-  const canvas=document.getElementById('gl');
-  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  function hasWebGL(){try{const c=document.createElement('canvas');return !!(window.WebGLRenderingContext&&(c.getContext('webgl')||c.getContext('experimental-webgl')));}catch(e){return false;}}
-  // Heading + card reveal (Stripe-polish, cheap)
-  if(window.gsap){
-    gsap.from('#card',{y:24,opacity:0,duration:.9,ease:'power3.out',delay:.12});
-    gsap.from('.auth-card h1 .kin',{opacity:0,y:16,duration:.9,ease:'power3.out',delay:.26});
-  }
-  if(!hasWebGL()){ canvas.style.display='none'; return; }  // CSS gradient fallback shows
-  let renderer;
-  try{ renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'}); }
-  catch(e){ canvas.style.display='none'; return; }
-  const isMobile=matchMedia('(max-width:768px)').matches;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, isMobile?1.5:2));
-  const scene=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(62, innerWidth/innerHeight, .1, 100); cam.position.z=15;
-  // ── Particle field (cursor-reactive) ──
-  const N=isMobile?1600:4200;
-  const pos=new Float32Array(N*3), col=new Float32Array(N*3);
-  const cA=new THREE.Color(0x2563eb), cB=new THREE.Color(0x22d3ee);
-  for(let i=0;i<N;i++){
-    const r=6+Math.random()*7.5, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
-    pos[i*3]=r*Math.sin(ph)*Math.cos(th); pos[i*3+1]=r*Math.sin(ph)*Math.sin(th); pos[i*3+2]=r*Math.cos(ph);
-    const c=cA.clone().lerp(cB, Math.random());
-    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
-  }
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
-  geo.setAttribute('color',new THREE.BufferAttribute(col,3));
-  const mat=new THREE.PointsMaterial({size:isMobile?.06:.05,vertexColors:true,transparent:true,
-    opacity:.92,blending:THREE.AdditiveBlending,depthWrite:false});
-  const pts=new THREE.Points(geo,mat); scene.add(pts);
-  let mx=0,my=0,tx=0,ty=0;
-  addEventListener('mousemove',e=>{ mx=e.clientX/innerWidth-.5; my=e.clientY/innerHeight-.5; });
-  function resize(){ cam.aspect=innerWidth/innerHeight; cam.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); }
-  addEventListener('resize',resize); resize();
-  function frame(t){
-    tx+=(mx-tx)*.045; ty+=(my-ty)*.045;
-    pts.rotation.y=(t||0)*0.00006 + tx*0.6;
-    pts.rotation.x=ty*0.4;
-    cam.position.x=tx*3.2; cam.position.y=-ty*3.2; cam.lookAt(0,0,0);
-    renderer.render(scene,cam);
-  }
-  if(reduce){ frame(0); }   // static frame, no RAF
-  else{ renderer.setAnimationLoop(frame); }
-})();
-</script>
 {% endblock %}
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script type="module" src="{% static 'web/js/login-hero.js' %}"></script>
+{% endblock %}
