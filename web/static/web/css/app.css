@@ -124,7 +124,6 @@ input:focus-visible, select:focus-visible {
 .twrap thead th,.table-wrap thead th{position:sticky;top:0;z-index:1;background:var(--panel-2)}
 .pad0{padding:0!important;overflow:hidden}
 .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-.twrap .num,.table-wrap .num{text-align:right}
 .pager{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:22px;color:var(--muted);font-size:13px}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 thead th{text-align:left;padding:12px 15px;background:var(--panel-2);color:var(--faint);font-weight:600;
@@ -133,7 +132,7 @@ tbody td{padding:12px 15px;border-bottom:1px solid var(--line);vertical-align:mi
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--panel-2)}
 table.flush{border:none} table.flush thead th{background:none}
-.r{text-align:right}
+.r, .twrap .num, .table-wrap .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- TABS / PILLS ---- */
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
