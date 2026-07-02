@@ -27,10 +27,8 @@ html,body{margin:0;padding:0}
 body{font-family:var(--font-body);background:var(--bg);color:var(--ink);
   display:flex;min-height:100vh;-webkit-font-smoothing:antialiased;letter-spacing:.1px}
 a{color:inherit;text-decoration:none}
-h1,h2,h3,.disp{font-family:var(--font-body);letter-spacing:-.02em}
 .muted{color:var(--muted)} .faint{color:var(--faint)}
 .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 
 /* ---- SIDEBAR ---- */
 .side{width:256px;flex-shrink:0;background:var(--side);color:var(--side-ink);
