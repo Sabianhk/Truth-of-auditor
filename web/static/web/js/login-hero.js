@@ -32,7 +32,7 @@ else {
     Promise.race([
       document.fonts.load('700 150px Zodiak'),
       new Promise((res) => setTimeout(res, 800)),
-    ]).then(() => init(renderer));
+    ]).then(() => init(renderer), () => init(renderer)); // fonts.load bisa REJECT (fetch font gagal) — tetap init; sampling serif fallback lebih baik daripada hero kosong
   }
 }
 
@@ -129,16 +129,18 @@ function init(renderer) {
     if (window.gsap) gsap.to(uni.uProgress, { value: 0, duration: .8, ease: 'power3.in' });
   });
 
-  let raf = null;
+  let raf = null, running = false;
   const clock = new THREE.Clock();
-  (function loop() {
+  function tick() {
     uni.uTime.value = clock.getElapsedTime();
     renderer.render(scene, cam);
-    raf = requestAnimationFrame(loop);
-  })();
-  addEventListener('pagehide', () => { cancelAnimationFrame(raf); geo.dispose(); mat.dispose(); renderer.dispose(); });
+    raf = requestAnimationFrame(tick);
+  }
+  // load di background tab: jangan start loop dulu — start di visible pertama (hindari chain RAF beku menumpuk)
+  if (!document.hidden) { running = true; raf = requestAnimationFrame(tick); }
+  addEventListener('pagehide', () => { cancelAnimationFrame(raf); running = false; geo.dispose(); mat.dispose(); renderer.dispose(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) cancelAnimationFrame(raf);
-    else (function loop() { uni.uTime.value = clock.getElapsedTime(); renderer.render(scene, cam); raf = requestAnimationFrame(loop); })();
+    if (document.hidden) { cancelAnimationFrame(raf); running = false; }
+    else if (!running) { running = true; raf = requestAnimationFrame(tick); } // guard: satu chain saja
   });
 }
