@@ -30,7 +30,7 @@ Keputusan user:
 - Hairline `rgba(28,26,21,.14)`; document-frame inset 12px (desktop)
 - Semantik bucket (dipertahankan): cocok `#1F7A4D` · tinjau `#9A6B15` · tidak cocok `#B3362A` — **stamp chips**: uppercase mono, border 1px, warna semantik
 - Login: ink-black `#12100C`, partikel bone `#EDE9DE` + aksen verdigris
-- Grain: SVG feTurbulence 4–5% opacity — **hanya** login, chrome (sidebar/header), empty-state. **Tabel bebas grain.**
+- Grain: SVG feTurbulence 4–5% opacity — **hanya** login, chrome (sidebar saja — topbar translucent bone tanpa grain, accepted deviation), empty-state. **Tabel bebas grain.**
 - Font (self-host via whitenoise, bukan CDN runtime):
   - **Zodiak** (Fontshare) — display: judul halaman besar + folio numeral. **Dilarang** di tabel/form/button.
   - **Supreme** (Fontshare) — body/UI.
@@ -52,14 +52,14 @@ web/static/web/fonts/             ← woff2 Zodiak/Supreme/IBM Plex Mono
 - CDN dipertahankan: GSAP UMD (pinned), htmx (pinned).
 - **Three.js r128 UMD → ESM importmap pinned** (mis. r167) — hanya di login.
 - **Lenis dibuang** dari halaman kerja (smooth-scroll mengganggu tabel panjang; login tidak scroll).
-- `app_base.html` dapat `{% block page_css %}` dan `{% block page_js %}` untuk aset per halaman.
+- `app_base.html` menyediakan aset per halaman lewat block existing `{% block head %}` dan `{% block scripts %}` (implementasi memakai block ini, bukan `{% block page_css %}`/`{% block page_js %}`).
 - Font preload + `font-display: swap` (no-FOIT); jalur whitenoise manifest hashing diverifikasi.
 
 ## 4. Halaman (semua 13 template)
 
 | Halaman | Perlakuan |
 |---|---|
-| Login (`registration/login.html`, `base.html`) | Ink + grain + **wordmark partikel** assemble/scatter; sukses login → scatter + wipe ke dashboard |
+| Login (`registration/login.html`, `base.html`) | Ink + grain + **wordmark partikel** assemble/scatter; sukses login → scatter terimplementasi (wipe login→app TIDAK — View Transitions hanya antar halaman app) |
 | Shell (`app_base.html`) | Sidebar ink di atas paper (dokumen-di-atas-meja); **folio numeral ghost** per halaman (01 DASBOR, 02 UNGGAH, …); margin-note rail metadata ≥1440px |
 | Dashboard | KPI cards + **rail horizontal batch terakhir** (scroll-snap, bukan pinned scrub) |
 | Upload | Drop-zone + tabel preview/riwayat: table chrome baru |
@@ -80,8 +80,8 @@ Tambahan: `@media print` untuk transaksi & run detail (kebutuhan auditor; saran 
 - Run rekonsiliasi → overlay "menyusun partikel" (canvas 2D) sampai redirect batch detail
 - View Transitions API antar halaman = progressive enhancement; tanpa dukungan → navigasi biasa
 - `prefers-reduced-motion` → semua animasi mati, login tampil wordmark statis
-- No-WebGL → fallback CSS gradient + wordmark statis
-- Partikel: cap 20k desktop / 7k mobile; DPR clamp ≤2; lazy-init saat canvas terlihat; dispose saat unload; target 60fps
+- No-WebGL → fallback flat ink background + wordmark statis (bukan CSS gradient)
+- Partikel: cap 20k desktop / 7k mobile; DPR clamp ≤2; init langsung (RAF ditunda saat tab hidden via visibilitychange guard, bukan lazy-init saat canvas terlihat); dispose saat unload; target 60fps
 
 ## 6. Testing & verifikasi
 

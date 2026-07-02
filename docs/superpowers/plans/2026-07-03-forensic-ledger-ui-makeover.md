@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-03-forensic-ledger-ui-makeover-design.md`
 
+> **Errata:** beberapa snippet plan mengandung bug yang diperbaiki saat implementasi (s.cocok→s.buckets.cocok; fonts.load tanpa reject-handler; gl_PointSize tanpa uPr; breakpoint ≤860px ditambahkan saat QA). Kode di repo adalah sumber kebenaran.
+
 ## Global Constraints
 
 - Branch kerja: `feat/forensic-ledger-ui`. Commit per task.
