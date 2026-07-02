@@ -60,3 +60,7 @@ class DashboardUiTests(TestCase):
         r = self.client.get("/reconcile/")
         self.assertContains(r, "REKONSILIASI")
         self.assertContains(r, "recon-overlay.js")
+
+    def test_folio_kelola(self):
+        self.assertContains(self.client.get("/kelola/user/"), "PENGGUNA")
+        self.assertContains(self.client.get("/kelola/toko/"), "TOKO")
