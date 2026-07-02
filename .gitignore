@@ -16,3 +16,5 @@ staticfiles/
 # Env & OS
 .env
 .DS_Store
+.gstack/
+.context/

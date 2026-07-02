@@ -74,13 +74,16 @@ function init(renderer) {
   geo.setAttribute('aTarget', new THREE.BufferAttribute(tgt, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
 
-  const uni = { uProgress: { value: 0 }, uPointer: { value: new THREE.Vector2(99, 99) }, uTime: { value: 0 } };
+  // uPr: gl_PointSize dalam device px — tanpa kompensasi, layar dpr=1 melihat partikel
+  // 2× ukuran CSS yang di-tune di retina (blob buram, QA Task 9). Normalisasi ke baseline dpr=2.
+  const uni = { uProgress: { value: 0 }, uPointer: { value: new THREE.Vector2(99, 99) }, uTime: { value: 0 },
+    uPr: { value: renderer.getPixelRatio() * .5 } };
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
     uniforms: uni,
     vertexShader: `
       attribute vec3 aTarget; attribute float aSeed;
-      uniform float uProgress; uniform float uTime; uniform vec2 uPointer;
+      uniform float uProgress; uniform float uTime; uniform vec2 uPointer; uniform float uPr;
       varying float vSeed;
       void main(){
         vSeed = aSeed;
@@ -93,7 +96,7 @@ function init(renderer) {
         float r = length(d);
         if (r < 1.2) base.xy += normalize(d) * (1.2 - r) * .7;
         vec4 mv = modelViewMatrix * vec4(base, 1.);
-        gl_PointSize = (2.4 - aSeed) * (3.2 / -mv.z) * ${isMobile ? '55.' : '80.'};
+        gl_PointSize = (2.4 - aSeed) * (3.2 / -mv.z) * uPr * ${isMobile ? '55.' : '80.'};
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
