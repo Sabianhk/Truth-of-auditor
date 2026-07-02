@@ -15,17 +15,17 @@
 {% if run.summary %}
 <div class="grid cols-4 reveal">
   <div class="card stat"><div class="k">Kiri (Panel)</div><div class="v num">{{ run.summary.left|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--ok)">Cocok</div><div class="v num" style="color:var(--ok)">{{ run.summary.cocok|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--warn)">Perlu Ditinjau</div><div class="v num" style="color:var(--warn)">{{ run.summary.perlu_tinjau|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--bad)">Tidak Cocok</div><div class="v num" style="color:var(--bad)">{{ run.summary.tidak_cocok|intcomma }}</div></div>
+  <a class="card stat" href="?bucket=cocok"><div class="k" style="color:var(--ok)">Cocok</div><div class="v num" style="color:var(--ok)">{{ run.summary.cocok|intcomma }}</div></a>
+  <a class="card stat" href="?bucket=perlu_tinjau"><div class="k" style="color:var(--warn)">Perlu Ditinjau</div><div class="v num" style="color:var(--warn)">{{ run.summary.perlu_tinjau|intcomma }}</div></a>
+  <a class="card stat" href="?bucket=tidak_cocok"><div class="k" style="color:var(--bad)">Tidak Cocok</div><div class="v num" style="color:var(--bad)">{{ run.summary.tidak_cocok|intcomma }}</div></a>
 </div>
 {% endif %}
 
 <div class="tabs reveal" style="margin-top:24px">
-  <a href="?" class="{% if not bucket %}active{% endif %}">Semua</a>
-  <a href="?bucket=cocok" class="{% if bucket == 'cocok' %}active{% endif %}">Cocok</a>
-  <a href="?bucket=perlu_tinjau" class="{% if bucket == 'perlu_tinjau' %}active{% endif %}">Perlu Ditinjau</a>
-  <a href="?bucket=tidak_cocok" class="{% if bucket == 'tidak_cocok' %}active{% endif %}">Tidak Cocok</a>
+  <a href="?" class="{% if not bucket %}active{% endif %}">Semua{% if run.summary %} ({{ run.summary.left|intcomma }}){% endif %}</a>
+  <a href="?bucket=cocok" class="{% if bucket == 'cocok' %}active{% endif %}">Cocok{% if run.summary %} ({{ run.summary.cocok|intcomma }}){% endif %}</a>
+  <a href="?bucket=perlu_tinjau" class="{% if bucket == 'perlu_tinjau' %}active{% endif %}">Perlu Ditinjau{% if run.summary %} ({{ run.summary.perlu_tinjau|intcomma }}){% endif %}</a>
+  <a href="?bucket=tidak_cocok" class="{% if bucket == 'tidak_cocok' %}active{% endif %}">Tidak Cocok{% if run.summary %} ({{ run.summary.tidak_cocok|intcomma }}){% endif %}</a>
 </div>
 
 <div class="card pad0 reveal">
