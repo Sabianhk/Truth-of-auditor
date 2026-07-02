@@ -57,6 +57,8 @@ a{color:inherit;text-decoration:none}
 .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:14px;
   padding:14px 30px;background:rgba(237,233,222,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .topbar .crumb{font-size:13px;color:var(--faint);font-weight:500}
+.crumb a{color:inherit;text-decoration:none}
+.crumb a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 .topbar .spacer{flex:1}
 .toko-pick{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--line-2);
   border-radius:11px;padding:7px 11px;box-shadow:var(--shadow)}

@@ -1,7 +1,7 @@
 {% extends "web/app_base.html" %}
 {% load humanize %}
 {% block title %}Run #{{ run.pk }} · Truth of Auditor{% endblock %}
-{% block crumb %}Rekonsiliasi · {{ run.get_relation_display }}{% endblock %}
+{% block crumb %}<a href="{% url 'reconcile' %}">Rekonsiliasi</a> · <a href="{% url 'batch_detail' run.batch.id %}">Batch #{{ run.batch.id }}</a> · {{ run.get_relation_display }}{% endblock %}
 {% block folio %}<b>04</b>RUN{% endblock %}
 {% block content %}
 <div class="page-head reveal" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">

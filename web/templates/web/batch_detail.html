@@ -1,7 +1,7 @@
 {% extends "web/app_base.html" %}
 {% load humanize %}
 {% block title %}Batch #{{ batch.pk }} · Rekonsiliasi{% endblock %}
-{% block crumb %}Rekonsiliasi · Batch #{{ batch.pk }}{% endblock %}
+{% block crumb %}<a href="{% url 'reconcile' %}">Rekonsiliasi</a> · Batch #{{ batch.pk }}{% endblock %}
 {% block folio %}<b>04</b>BATCH{% endblock %}
 {% block content %}
 <div class="page-head reveal" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
