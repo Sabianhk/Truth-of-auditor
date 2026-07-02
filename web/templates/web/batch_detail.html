@@ -59,7 +59,7 @@
         <td><span class="badge bad">{{ run.summary.tidak_cocok|default:0|intcomma }}</span></td>
         <td><a class="btn sm" href="{% url 'run_detail' run.pk %}">Detail →</a> <a class="btn sm ghost" href="{% url 'export_run' run.pk %}">Excel</a></td>
       </tr>
-    {% empty %}<tr><td colspan="5" class="faint">Tidak ada relasi dijalankan.</td></tr>{% endfor %}
+    {% empty %}<tr><td colspan="5" class="faint">Tidak ada relasi dijalankan. <a href="{% url 'reconcile' %}">Jalankan rekonsiliasi →</a></td></tr>{% endfor %}
     </tbody>
   </table>
   </div>

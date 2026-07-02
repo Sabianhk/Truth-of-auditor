@@ -56,6 +56,8 @@
         <td class="faint">{{ u.last_login|date:"d/m H:i"|default:"—" }}</td>
         <td class="r"><a class="btn sm" href="{% url 'kelola_user_edit' u.pk %}">Kelola →</a></td>
       </tr>
+    {% empty %}
+      <tr><td colspan="7" class="faint">Belum ada pengguna. Tambah lewat form di atas.</td></tr>
     {% endfor %}
     </tbody>
   </table>
