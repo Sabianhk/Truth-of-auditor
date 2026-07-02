@@ -16,3 +16,6 @@ class StaticAssetTests(TestCase):
             "web/fonts/IBMPlexMono-Medium.woff2",
         ]:
             self.assertIsNotNone(finders.find(f), f)
+
+    def test_app_css_ditemukan(self):
+        self.assertIsNotNone(finders.find("web/css/app.css"))
