@@ -51,3 +51,7 @@ class DashboardUiTests(TestCase):
         self.assertContains(r, "DASBOR")
         self.assertContains(r, "hrail")
         self.assertIn("batches", r.context)
+
+    def test_folio_upload_transaksi(self):
+        self.assertContains(self.client.get("/upload/"), "UNGGAH")
+        self.assertContains(self.client.get("/transactions/"), "TRANSAKSI")

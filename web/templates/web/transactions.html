@@ -2,6 +2,7 @@
 {% load humanize %}
 {% block title %}Transaksi · Truth of Auditor{% endblock %}
 {% block crumb %}Transaksi{% endblock %}
+{% block folio %}<b>03</b>TRANSAKSI{% endblock %}
 {% block content %}
 <div class="page-head reveal">
   <h1>Transaksi</h1>
@@ -34,7 +35,7 @@
         <td>{{ t.get_jenis_display }}</td>
         <td class="num mono">{{ t.amount|floatformat:0|intcomma }}</td>
         <td class="num mono" style="color:{% if t.money_delta > 0 %}var(--ok){% elif t.money_delta < 0 %}var(--bad){% else %}var(--faint){% endif %}">{{ t.money_delta|floatformat:0|intcomma }}</td>
-        <td class="mono">{{ t.ticket_no|default:"—" }}</td>
+        <td class="num mono">{{ t.ticket_no|default:"—" }}</td>
         <td>{{ t.username|default:"—" }}</td>
         <td class="faint">{{ t.counterparty|truncatechars:26|default:"—" }}</td>
       </tr>

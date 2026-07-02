@@ -1,6 +1,7 @@
 {% extends "web/app_base.html" %}
 {% block title %}Upload · Truth of Auditor{% endblock %}
 {% block crumb %}Upload &amp; Parse{% endblock %}
+{% block folio %}<b>02</b>UNGGAH{% endblock %}
 {% block content %}
 <div class="page-head reveal">
   <h1>Upload &amp; Parse</h1>
@@ -11,7 +12,7 @@
   <form method="post" enctype="multipart/form-data" id="upform">
     {% csrf_token %}
     <input type="hidden" name="action" value="analyze">
-    <label class="dz" for="fileInput">
+    <label class="dz grain" for="fileInput">
       <div class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg></div>
       <div style="font-weight:600">Lepas file di sini atau klik untuk pilih</div>
       <div class="faint" style="font-size:13px;margin-top:4px">xlsx · csv · pdf — bisa banyak sekaligus</div>
