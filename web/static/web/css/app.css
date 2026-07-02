@@ -115,6 +115,10 @@ input:focus-visible, select:focus-visible {
 
 /* ---- TABLE ---- */
 .twrap,.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--line)}
+.twrap,.table-wrap,.hrail{scrollbar-width:thin;scrollbar-color:rgba(28,26,21,.25) transparent}
+.twrap::-webkit-scrollbar,.table-wrap::-webkit-scrollbar,.hrail::-webkit-scrollbar{height:6px}
+.twrap::-webkit-scrollbar-thumb,.table-wrap::-webkit-scrollbar-thumb,.hrail::-webkit-scrollbar-thumb{background:rgba(28,26,21,.25);border-radius:3px}
+.twrap thead th,.table-wrap thead th{position:sticky;top:0;z-index:1;background:var(--panel-2)}
 .pad0{padding:0!important;overflow:hidden}
 .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 .twrap .num,.table-wrap .num{text-align:right}
