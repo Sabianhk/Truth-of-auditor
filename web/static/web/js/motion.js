@@ -1,6 +1,8 @@
 /* Truth of Auditor — motion layer (Forensic Ledger). GSAP UMD global; htmx-aware. */
 (function () {
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var seen = false;
+  try { seen = sessionStorage.getItem('toa-motion-seen') === '1'; } catch (e) {}
 
   function countUp(el) {
     var to = parseFloat(el.getAttribute('data-count')) || 0, dur = 900, t0 = null;
@@ -19,14 +21,22 @@
       var els = root.querySelectorAll('.reveal:not([data-motion-done])');
       if (els.length) {
         els.forEach(function (el) { el.setAttribute('data-motion-done', '1'); });
-        gsap.set(els, { opacity: 1 });
-        gsap.from(els, { y: 14, opacity: 0, duration: .55, ease: 'power3.out', stagger: .05 });
+        if (seen) {
+          gsap.set(els, { opacity: 1, y: 0 });
+        } else {
+          gsap.set(els, { opacity: 1 });
+          gsap.from(els, { y: 14, opacity: 0, duration: .55, ease: 'power3.out', stagger: .05 });
+        }
       }
     }
     root.querySelectorAll('[data-count]:not([data-motion-done])').forEach(function (el) {
       el.setAttribute('data-motion-done', '1');
-      reduce ? el.textContent = (parseFloat(el.getAttribute('data-count')) || 0).toLocaleString('id-ID') : countUp(el);
+      var finalVal = (parseFloat(el.getAttribute('data-count')) || 0).toLocaleString('id-ID');
+      (reduce || seen) ? el.textContent = finalVal : countUp(el);
     });
+    if (!seen) {
+      try { sessionStorage.setItem('toa-motion-seen', '1'); } catch (e) {}
+    }
   }
 
   window.ToaMotion = { init: init };
