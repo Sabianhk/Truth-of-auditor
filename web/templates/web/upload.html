@@ -79,10 +79,10 @@
         <td>{{ u.original_name|default:u.pk }}</td>
         <td>{{ u.source_type.name }}</td>
         <td>{{ u.provider|default:"—" }}</td>
-        <td>{{ u.flow|default:"—" }}</td>
+        <td>{% if u.flow == 'both' %}DP+WD{% elif u.flow == 'dp' %}DP{% elif u.flow == 'wd' %}WD{% elif u.flow %}{{ u.flow|upper }}{% else %}—{% endif %}</td>
         <td class="r num">{{ u.rows_parsed|intcomma }}</td>
         <td class="r num faint">{{ u.rows_duplicate|intcomma }}</td>
-        <td>{% if u.status == 'parsed' %}<span class="badge ok">parsed</span>{% elif u.status == 'error' %}<span class="badge bad">error</span>{% else %}<span class="badge warn">{{ u.status }}</span>{% endif %}</td>
+        <td>{% if u.status == 'parsed' %}<span class="badge ok">TERPARSE</span>{% elif u.status == 'error' %}<span class="badge bad">GAGAL</span>{% else %}<span class="badge warn">{{ u.status }}</span>{% endif %}</td>
         <td>{{ u.uploaded_by.username|default:"—" }}</td>
         <td class="faint">{{ u.created_at|date:"d/m H:i" }}</td>
         {% if is_admin_user %}
