@@ -97,6 +97,9 @@ a{color:inherit;text-decoration:none}
 .btn.primary:hover{background:#000}
 .btn.sm{padding:6px 12px;font-size:12.5px;border-radius:9px}
 .btn.ghost{background:transparent;box-shadow:none}
+.btn.danger{color:var(--bad);border-color:currentColor}
+.btn.danger:hover{background:rgba(179,54,42,.08)}
+button.htmx-request{opacity:.5;pointer-events:none}
 
 /* ---- FORM ---- */
 label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:500}
