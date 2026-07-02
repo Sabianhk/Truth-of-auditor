@@ -57,7 +57,7 @@
           <form method="post" action="{% url 'delete_batch' b.pk %}" style="display:inline"
                 onsubmit="return confirm('Hapus Batch #{{ b.pk }}? Semua hasil rekonsiliasinya terhapus (transaksi tetap utuh).')">
             {% csrf_token %}
-            <button class="btn sm ghost" type="submit" style="color:var(--bad)">Hapus</button>
+            <button class="btn sm ghost danger" type="submit">Hapus</button>
           </form>
         </td>
         {% endif %}

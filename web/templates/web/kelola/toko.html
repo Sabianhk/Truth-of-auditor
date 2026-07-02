@@ -33,7 +33,7 @@
         <td class="r num">{{ t.n_up|intcomma }}</td>
         <td>{% if t.is_active %}<span class="badge ok">aktif</span>{% else %}<span class="badge bad">nonaktif</span>{% endif %}</td>
         <td class="r">
-          <form method="post" style="display:inline">
+          <form method="post" style="display:inline" onsubmit="return confirm('{% if t.is_active %}Nonaktifkan toko {{ t.name }}? Data toko tetap tersimpan.{% else %}Aktifkan toko {{ t.name }}?{% endif %}')">
             {% csrf_token %}
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="toko_id" value="{{ t.id }}">

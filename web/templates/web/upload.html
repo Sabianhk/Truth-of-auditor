@@ -90,7 +90,7 @@
           <form method="post" action="{% url 'delete_upload' u.pk %}" style="display:inline"
                 onsubmit="return confirm('Hapus {{ u.original_name|default:u.pk }}? {{ u.rows_parsed }} baris transaksi ikut terhapus. Tidak bisa dibatalkan.')">
             {% csrf_token %}
-            <button class="btn sm ghost" type="submit" style="color:var(--bad)">Hapus</button>
+            <button class="btn sm ghost danger" type="submit">Hapus</button>
           </form>
         </td>
         {% endif %}
