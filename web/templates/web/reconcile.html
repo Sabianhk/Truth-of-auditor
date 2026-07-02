@@ -49,8 +49,8 @@
       <tr>
         <td><a class="grad-text" style="font-weight:600" href="{% url 'batch_detail' b.pk %}">#{{ b.pk }}</a></td>
         <td class="faint">{{ b.created_at|date:"d/m H:i" }}</td>
-        <td class="num">{{ b.summary.dp.selisih|default:0|floatformat:0|intcomma }}</td>
-        <td class="num">{{ b.summary.wd.selisih|default:0|floatformat:0|intcomma }}</td>
+        <td class="num" style="color:{% if b.summary.dp.selisih > 0 %}var(--ok){% elif b.summary.dp.selisih < 0 %}var(--bad){% else %}var(--faint){% endif %}">{{ b.summary.dp.selisih|default:0|floatformat:0|intcomma }}</td>
+        <td class="num" style="color:{% if b.summary.wd.selisih > 0 %}var(--ok){% elif b.summary.wd.selisih < 0 %}var(--bad){% else %}var(--faint){% endif %}">{{ b.summary.wd.selisih|default:0|floatformat:0|intcomma }}</td>
         <td><span class="badge ok">{{ b.summary.buckets.cocok|default:0|intcomma }}</span></td>
         {% if is_admin_user %}
         <td class="r">

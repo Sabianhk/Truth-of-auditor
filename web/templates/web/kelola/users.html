@@ -50,7 +50,7 @@
       <tr>
         <td style="font-weight:600">{{ u.username }}</td>
         <td>{{ u.first_name|default:"—" }}</td>
-        <td><span class="badge src plain">{{ u.get_role_display }}</span></td>
+        <td><span class="badge src">{{ u.get_role_display }}</span></td>
         <td class="faint">{% if u.role == 'auditor' %}{{ u.allowed_tokos.all|join:", "|default:"—" }}{% else %}semua{% endif %}</td>
         <td>{% if u.is_active %}<span class="badge ok">aktif</span>{% else %}<span class="badge bad">nonaktif</span>{% endif %}</td>
         <td class="faint">{{ u.last_login|date:"d/m H:i"|default:"—" }}</td>

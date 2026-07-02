@@ -54,7 +54,7 @@
     {% for s in by_source %}
     <div style="margin-bottom:15px">
       <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">
-        <span><span class="badge src plain">{{ s.source_type__key }}</span> {{ s.source_type__name }}</span>
+        <span><span class="badge src">{{ s.source_type__key }}</span> {{ s.source_type__name }}</span>
         <b class="num">{{ s.n|intcomma }}</b>
       </div>
       <div style="height:8px;border-radius:99px;background:var(--panel-2);overflow:hidden">
@@ -89,7 +89,7 @@
     <thead><tr><th>File</th><th>Sumber</th><th>Flow</th><th class="r">Baris</th><th class="r">Duplikat</th><th>Waktu</th></tr></thead>
     <tbody>
     {% for u in uploads %}
-      <tr><td>{{ u.original_name }}</td><td><span class="badge src plain">{{ u.source_type.key }}</span></td>
+      <tr><td>{{ u.original_name }}</td><td><span class="badge src">{{ u.source_type.key }}</span></td>
       <td class="faint">{% if u.flow == 'both' %}DP+WD{% elif u.flow == 'dp' %}DP{% elif u.flow == 'wd' %}WD{% elif u.flow %}{{ u.flow|upper }}{% else %}—{% endif %}</td><td class="r num">{{ u.rows_parsed|intcomma }}</td>
       <td class="r num faint">{{ u.rows_duplicate|intcomma }}</td><td class="faint">{{ u.created_at|date:"d/m/Y H:i" }}</td></tr>
     {% empty %}<tr><td colspan="6" class="muted" style="padding:24px">Belum ada file.</td></tr>{% endfor %}
