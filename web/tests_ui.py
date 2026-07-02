@@ -33,10 +33,8 @@ class ShellTests(TestCase):
 
     def test_shell_pakai_app_css_dan_motion_js(self):
         r = self.client.get("/")
-        # ManifestStaticFilesStorage menyisipkan hash pada nama file
-        # (web/css/app.<hash>.css), jadi cocokkan pada stem, bukan literal.
-        self.assertContains(r, "web/css/app.")
-        self.assertContains(r, "web/js/motion.")
+        self.assertContains(r, "web/css/app.css")
+        self.assertContains(r, "web/js/motion.js")
         self.assertNotContains(r, "lenis")          # Lenis dibuang
         self.assertNotContains(r, "fonts.googleapis") # Google Fonts dibuang
         self.assertContains(r, 'class="folio"')
