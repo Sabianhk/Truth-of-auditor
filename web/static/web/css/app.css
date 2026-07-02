@@ -195,6 +195,9 @@ table.flush{border:none} table.flush thead th{background:none}
   .side .who{border-top:none;margin:0 0 4px auto;padding:0 4px 0 12px;font-size:12.5px;text-align:right}
   .topbar{padding:12px 16px}
   .content{padding:20px 16px 60px}
+  .toko-pick select{min-height:44px}
+  .btn.sm{min-height:44px}
+  .side .link{min-height:44px}
 }
 
 /* View Transitions (progressive) */
