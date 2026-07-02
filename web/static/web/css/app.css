@@ -159,9 +159,9 @@ table.flush{border:none} table.flush thead th{background:none}
 /* Folio — numeral dossier ghost per halaman */
 .page-wrap{position:relative}
 .folio{position:absolute;top:-6px;right:0;font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--faint);user-select:none}
+  text-transform:uppercase;color:var(--faint);user-select:none;pointer-events:none}
 .folio b{font-family:var(--font-display);font-weight:700;font-size:64px;line-height:.8;display:block;
-  text-align:right;color:rgba(28,26,21,.07);letter-spacing:-.02em}
+  text-align:right;color:rgba(28,26,21,.028);letter-spacing:-.02em}
 @media(max-width:900px){.folio b{font-size:40px}}
 
 /* Stamp — status chip gaya cap dokumen (menimpa gaya .badge lama) */
