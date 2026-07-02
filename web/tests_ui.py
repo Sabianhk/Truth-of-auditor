@@ -1,5 +1,8 @@
+from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.test import TestCase
+
+from sources.models import Toko
 
 
 class StaticAssetTests(TestCase):
@@ -19,3 +22,21 @@ class StaticAssetTests(TestCase):
 
     def test_app_css_ditemukan(self):
         self.assertIsNotNone(finders.find("web/css/app.css"))
+
+
+class ShellTests(TestCase):
+    def setUp(self):
+        self.toko = Toko.objects.filter(is_active=True).first() or Toko.objects.create(key="lbs", name="LBS", is_active=True)
+        U = get_user_model()
+        self.admin = U.objects.create_superuser("uiadmin", password="rahasia-123")
+        self.client.force_login(self.admin)
+
+    def test_shell_pakai_app_css_dan_motion_js(self):
+        r = self.client.get("/")
+        # ManifestStaticFilesStorage menyisipkan hash pada nama file
+        # (web/css/app.<hash>.css), jadi cocokkan pada stem, bukan literal.
+        self.assertContains(r, "web/css/app.")
+        self.assertContains(r, "web/js/motion.")
+        self.assertNotContains(r, "lenis")          # Lenis dibuang
+        self.assertNotContains(r, "fonts.googleapis") # Google Fonts dibuang
+        self.assertContains(r, 'class="folio"')
