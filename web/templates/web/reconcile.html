@@ -1,7 +1,8 @@
 {% extends "web/app_base.html" %}
-{% load humanize %}
+{% load humanize static %}
 {% block title %}Rekonsiliasi · Truth of Auditor{% endblock %}
 {% block crumb %}Rekonsiliasi{% endblock %}
+{% block folio %}<b>04</b>REKONSILIASI{% endblock %}
 {% block content %}
 <div class="page-head reveal">
   <h1>Rekonsiliasi — {{ active_toko.name }}</h1>
@@ -25,7 +26,7 @@
 
   <div class="card reveal">
     <h3 style="margin:0 0 12px">Jalankan</h3>
-    <form method="post">
+    <form method="post" id="run-form">
       {% csrf_token %}
       <div class="field"><label>Profil Toleransi</label>
         <select name="tolerance" class="f">{% for t in tolerances %}<option value="{{ t.name }}">{{ t.name }} (±{{ t.date_window_days }} hari)</option>{% endfor %}</select></div>
@@ -67,3 +68,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'web/js/recon-overlay.js' %}" defer></script>{% endblock %}

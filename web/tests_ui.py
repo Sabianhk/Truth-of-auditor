@@ -55,3 +55,8 @@ class DashboardUiTests(TestCase):
     def test_folio_upload_transaksi(self):
         self.assertContains(self.client.get("/upload/"), "UNGGAH")
         self.assertContains(self.client.get("/transactions/"), "TRANSAKSI")
+
+    def test_folio_reconcile(self):
+        r = self.client.get("/reconcile/")
+        self.assertContains(r, "REKONSILIASI")
+        self.assertContains(r, "recon-overlay.js")

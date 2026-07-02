@@ -2,6 +2,7 @@
 {% load humanize %}
 {% block title %}Run #{{ run.pk }} · Truth of Auditor{% endblock %}
 {% block crumb %}Rekonsiliasi · {{ run.get_relation_display }}{% endblock %}
+{% block folio %}<b>04</b>RUN{% endblock %}
 {% block content %}
 <div class="page-head reveal" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
   <div>
@@ -13,10 +14,10 @@
 
 {% if run.summary %}
 <div class="grid cols-4 reveal">
-  <div class="card stat"><div class="k">Kiri (Panel)</div><div class="v">{{ run.summary.left|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--ok)">Cocok</div><div class="v" style="color:var(--ok)">{{ run.summary.cocok|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--warn)">Perlu Ditinjau</div><div class="v" style="color:var(--warn)">{{ run.summary.perlu_tinjau|intcomma }}</div></div>
-  <div class="card stat"><div class="k" style="color:var(--bad)">Tidak Cocok</div><div class="v" style="color:var(--bad)">{{ run.summary.tidak_cocok|intcomma }}</div></div>
+  <div class="card stat"><div class="k">Kiri (Panel)</div><div class="v num">{{ run.summary.left|intcomma }}</div></div>
+  <div class="card stat"><div class="k" style="color:var(--ok)">Cocok</div><div class="v num" style="color:var(--ok)">{{ run.summary.cocok|intcomma }}</div></div>
+  <div class="card stat"><div class="k" style="color:var(--warn)">Perlu Ditinjau</div><div class="v num" style="color:var(--warn)">{{ run.summary.perlu_tinjau|intcomma }}</div></div>
+  <div class="card stat"><div class="k" style="color:var(--bad)">Tidak Cocok</div><div class="v num" style="color:var(--bad)">{{ run.summary.tidak_cocok|intcomma }}</div></div>
 </div>
 {% endif %}
 

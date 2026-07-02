@@ -2,6 +2,7 @@
 {% load humanize %}
 {% block title %}Batch #{{ batch.pk }} · Rekonsiliasi{% endblock %}
 {% block crumb %}Rekonsiliasi · Batch #{{ batch.pk }}{% endblock %}
+{% block folio %}<b>04</b>BATCH{% endblock %}
 {% block content %}
 <div class="page-head reveal" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
   <div>
@@ -21,17 +22,17 @@
   <div class="card reveal">
     <h3 style="margin:0 0 12px">Deposit (DP)</h3>
     <table>
-      <tr><td>Panel (koin)</td><td>{{ s.dp.panel|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td>Uang real</td><td>{{ s.dp.money|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td><b>Selisih</b></td><td>{% if s.dp.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn">{{ s.dp.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
+      <tr><td>Panel (koin)</td><td class="num">{{ s.dp.panel|default:0|floatformat:0|intcomma }}</td></tr>
+      <tr><td>Uang real</td><td class="num">{{ s.dp.money|default:0|floatformat:0|intcomma }}</td></tr>
+      <tr><td><b>Selisih</b></td><td>{% if s.dp.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn num">{{ s.dp.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
     </table>
   </div>
   <div class="card reveal">
     <h3 style="margin:0 0 12px">Withdraw (WD)</h3>
     <table>
-      <tr><td>Panel (koin)</td><td>{{ s.wd.panel|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td>Uang real</td><td>{{ s.wd.money|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td><b>Selisih</b></td><td>{% if s.wd.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn">{{ s.wd.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
+      <tr><td>Panel (koin)</td><td class="num">{{ s.wd.panel|default:0|floatformat:0|intcomma }}</td></tr>
+      <tr><td>Uang real</td><td class="num">{{ s.wd.money|default:0|floatformat:0|intcomma }}</td></tr>
+      <tr><td><b>Selisih</b></td><td>{% if s.wd.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn num">{{ s.wd.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
     </table>
   </div>
 </div>
