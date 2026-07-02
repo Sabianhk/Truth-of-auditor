@@ -57,8 +57,8 @@
         <span><span class="badge src plain">{{ s.source_type__key }}</span> {{ s.source_type__name }}</span>
         <b class="num">{{ s.n|intcomma }}</b>
       </div>
-      <div style="height:8px;border-radius:99px;background:#eef1f6;overflow:hidden">
-        <div style="height:100%;width:{% widthratio s.n tx_total 100 %}%;background:var(--grad);border-radius:99px"></div>
+      <div style="height:8px;border-radius:99px;background:var(--panel-2);overflow:hidden">
+        <div style="height:100%;width:{% widthratio s.n tx_total 100 %}%;background:var(--brand);border-radius:99px"></div>
       </div>
     </div>
     {% empty %}<p class="muted">Belum ada data. <a class="grad-text" href="{% url 'upload' %}">Upload file →</a></p>{% endfor %}

@@ -11,6 +11,7 @@
     ov.innerHTML = '<div style="text-align:center"><canvas id="ov-c" width="260" height="80"></canvas>' +
       '<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-top:14px">Menyusun rekonsiliasi…</div></div>';
     document.body.appendChild(ov);
+    addEventListener('pageshow', function (e) { if (e.persisted) ov.remove(); });
     if (reduce) return;
     var c = ov.querySelector('#ov-c'), x = c.getContext('2d'), N = 140, P = [];
     for (var i = 0; i < N; i++) P.push({ x: Math.random() * 260, y: Math.random() * 80, tx: 20 + (i % 28) * 8, ty: 24 + Math.floor(i / 28) * 8, v: .02 + Math.random() * .04 });
