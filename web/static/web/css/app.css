@@ -118,8 +118,12 @@ input:focus-visible, select:focus-visible {
   outline-offset: 2px;
 }
 
-/* ---- TABLE ---- */
-.twrap,.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--line)}
+/* ---- TABLE — ledger pages, not boxed widgets ---- */
+.twrap,.table-wrap{overflow-x:auto}
+.card.ledger{background:none;border:none;box-shadow:none;border-radius:0;padding:0}
+.card.ledger>.hd{padding:0 0 12px;display:flex;align-items:baseline;justify-content:space-between}
+.card.ledger>.hd h3{margin:0}
+.twrap table,.table-wrap table{border-top:1.5px solid var(--ink)}
 .twrap,.table-wrap,.hrail{scrollbar-width:thin;scrollbar-color:rgba(28,26,21,.25) transparent}
 .twrap::-webkit-scrollbar,.table-wrap::-webkit-scrollbar,.hrail::-webkit-scrollbar{height:6px}
 .twrap::-webkit-scrollbar-thumb,.table-wrap::-webkit-scrollbar-thumb,.hrail::-webkit-scrollbar-thumb{background:rgba(28,26,21,.25);border-radius:3px}
@@ -131,8 +135,8 @@ table{width:100%;border-collapse:collapse;font-size:13.5px}
 thead th{text-align:left;padding:12px 15px;background:var(--panel-2);color:var(--faint);font-weight:600;
   font-size:11px;text-transform:uppercase;font-family:var(--font-mono);letter-spacing:.08em;border-bottom:1px solid var(--line);white-space:nowrap}
 tbody td{padding:12px 15px;border-bottom:1px solid var(--line);vertical-align:middle}
-tbody tr:last-child td{border-bottom:none}
-tbody tr:hover{background:var(--panel-2)}
+tbody tr:last-child td{border-bottom:1.5px solid var(--ink)}
+tbody tr:hover{background:rgba(28,26,21,.035)}
 table.flush{border:none} table.flush thead th{background:none}
 .r, .twrap .num, .table-wrap .num { text-align: right; font-variant-numeric: tabular-nums; }
 

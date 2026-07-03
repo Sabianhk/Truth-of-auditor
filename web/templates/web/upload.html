@@ -68,9 +68,9 @@
 {% endif %}
 
 {% load humanize %}
-<div class="card reveal" style="padding:0;overflow:hidden">
-  <div style="padding:18px 20px 6px"><h3 style="margin:0">Riwayat Upload — {{ active_toko.name }}</h3></div>
-  <div class="twrap" style="border:none">
+<div class="card ledger reveal" style="margin-top:22px">
+  <div class="hd"><h3>Riwayat Upload — {{ active_toko.name }}</h3></div>
+  <div class="twrap">
   <table>
     <thead><tr><th>File</th><th>Jenis</th><th>Provider</th><th>DP/WD</th><th class="r">Baris</th><th class="r">Dup</th><th>Status</th><th>Oleh</th><th>Waktu</th>{% if is_admin_user %}<th></th>{% endif %}</tr></thead>
     <tbody>
