@@ -13,6 +13,7 @@
   --brand:#2E7D5B; --brand-2:#B3362A; --grad:none;
   --ok:#1F7A4D; --ok-bg:#E3EFE4; --warn:#9A6B15; --warn-bg:#F4EAD2; --bad:#B3362A; --bad-bg:#F6E3DF;
   --radius:6px; --radius-sm:4px;
+  --grid-line:rgba(28,26,21,.028);
   --shadow:0 1px 0 rgba(28,26,21,.06); --shadow-lg:0 14px 30px -18px rgba(28,26,21,.25);
   --font-display:'Zodiak',Georgia,serif; --font-body:'Supreme',system-ui,sans-serif; --font-mono:'IBM Plex Mono',ui-monospace,monospace;
 }
@@ -65,7 +66,9 @@ a{color:inherit;text-decoration:none}
 .toko-pick svg{width:16px;height:16px;color:var(--brand)}
 .toko-pick .lbl{font-size:11px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .toko-pick select{border:none;background:none;font-family:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer;padding:0 2px}
-.content{padding:28px 30px 70px;max-width:1240px;width:100%}
+.content{padding:28px 30px 70px;max-width:1240px;width:100%;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:28px 28px;background-position:0 -1px}
 .page-head{margin:0 0 22px}
 .page-head h1{margin:0 0 5px;font-size:27px;font-weight:700}
 .page-head p{margin:0;color:var(--muted);font-size:14.5px}
@@ -200,9 +203,9 @@ table.flush{border:none} table.flush thead th{background:none}
 .page-wrap{position:relative}
 .folio{position:absolute;top:-6px;right:0;font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--faint);user-select:none;pointer-events:none}
-.folio b{font-family:var(--font-display);font-weight:700;font-size:64px;line-height:.8;display:block;
-  text-align:right;color:rgba(28,26,21,.028);letter-spacing:-.02em}
-@media(max-width:900px){.folio b{font-size:40px}}
+.folio b{font-family:var(--font-display);font-weight:700;font-size:92px;line-height:.78;display:block;
+  text-align:right;color:rgba(28,26,21,.05);letter-spacing:-.03em}
+@media(max-width:900px){.folio b{font-size:52px}}
 @media(max-width:600px){.folio{display:none}}
 
 /* Stamp — status chip gaya cap dokumen (menimpa gaya .badge lama) */
