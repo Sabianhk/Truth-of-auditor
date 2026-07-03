@@ -123,8 +123,14 @@ function init(renderer) {
   });
 
   // assemble saat load (GSAP UMD sudah ada di halaman)
-  if (window.gsap) gsap.to(uni.uProgress, { value: 1, duration: 2.2, ease: 'power2.inOut', delay: .3 });
-  else uni.uProgress.value = 1;
+  let assembled = false;
+  if (window.gsap) gsap.to(uni.uProgress, { value: 1, duration: 2.2, ease: 'power2.inOut', delay: .3, onComplete: () => { assembled = true; } });
+  else { uni.uProgress.value = 1; assembled = true; }
+
+  // reaktif: partikel "scan"/settle ulang saat user fokus ke field (setelah assemble; autofocus awal tidak memicu)
+  document.querySelectorAll('form input').forEach((f) => f.addEventListener('focus', () => {
+    if (assembled && window.gsap) gsap.fromTo(uni.uProgress, { value: .9 }, { value: 1, duration: .9, ease: 'power2.out', overwrite: true });
+  }));
 
   // scatter + wipe saat submit login
   const form = document.querySelector('form');
