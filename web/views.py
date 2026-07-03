@@ -50,6 +50,23 @@ def dashboard(request):
         .annotate(n=Count("id"))
         .order_by("-n")
     )
+    batches = list(ReconBatch.objects.filter(toko=active).order_by("-id")[:10])
+    # hero: money-at-risk of the latest batch (read-only presentational aggregate)
+    hero = None
+    if batches:
+        hs = batches[0].summary or {}
+        dp_s = (hs.get("dp") or {}).get("selisih", 0) or 0
+        wd_s = (hs.get("wd") or {}).get("selisih", 0) or 0
+        bk = hs.get("buckets") or {}
+        hero = {
+            "batch": batches[0],
+            "selisih_total": abs(dp_s) + abs(wd_s),
+            "dp_selisih": dp_s,
+            "wd_selisih": wd_s,
+            "tidak_cocok": bk.get("tidak_cocok", 0),
+            "perlu_tinjau": bk.get("perlu_tinjau", 0),
+            "cocok": bk.get("cocok", 0),
+        }
     ctx = {
         "active_toko": active,
         "tx_total": tx.count(),
@@ -58,7 +75,8 @@ def dashboard(request):
         "by_source": by_source,
         "uploads": uploads.select_related("source_type").order_by("-id")[:8],
         "runs": runs.order_by("-id")[:8],
-        "batches": ReconBatch.objects.filter(toko=active).order_by("-id")[:10],
+        "batches": batches,
+        "hero": hero,
     }
     return render(request, "web/dashboard.html", ctx)
 
@@ -181,8 +199,21 @@ def reconcile(request):
 @login_required
 def batch_detail(request, pk):
     batch = get_object_or_404(ReconBatch, pk=pk, toko__in=tokos_for(request.user))
+    s = batch.summary or {}
+
+    def _sev(side):
+        d = s.get(side) or {}
+        panel = float(d.get("panel") or 0)
+        selisih = abs(float(d.get("selisih") or 0))
+        if selisih == 0:
+            return "ok"
+        if panel and selisih / panel > 0.05:  # >5% gap = flag
+            return "bad"
+        return "warn"
+
     return render(request, "web/batch_detail.html", {
-        "batch": batch, "s": batch.summary or {}, "runs": batch.runs.all(),
+        "batch": batch, "s": s, "runs": batch.runs.all(),
+        "dp_sev": _sev("dp"), "wd_sev": _sev("wd"),
     })
 
 

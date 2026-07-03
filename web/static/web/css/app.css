@@ -98,6 +98,18 @@ table.mini .src-k{width:1%;white-space:nowrap;padding-right:16px;color:var(--mut
 .stat .k{font-size:12px;color:var(--muted);font-weight:500}
 .stat .v{font-family:var(--font-mono);font-weight:500;font-size:28px;line-height:1;letter-spacing:-.02em}
 .stat .v.g{color:var(--ok)} .stat .v.r{color:var(--bad)}
+/* hero metric — the single forensic number (money-at-risk), ledger-total style */
+.hero-metric{border-top:2px solid var(--ink);padding:18px 0 26px;margin-bottom:2px}
+.hm-top{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:12px}
+.hm-label{font-family:var(--font-mono);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.hm-batch{font-family:var(--font-mono);font-size:12.5px;color:var(--brand);white-space:nowrap}
+.hm-value{font-family:var(--font-mono);font-weight:500;font-size:62px;line-height:.92;letter-spacing:-.02em;
+  color:var(--ink);display:flex;align-items:baseline;gap:12px;font-variant-numeric:tabular-nums}
+.hm-value .hm-cur{font-size:22px;font-weight:500;color:var(--muted);letter-spacing:0}
+.hm-value.is-ok{color:var(--ok)}
+.hm-sub{display:flex;align-items:center;gap:24px;margin-top:16px;font-size:13.5px;color:var(--muted)}
+.hm-sub b{color:var(--ink);font-weight:600}
+@media(max-width:640px){.hm-value{font-size:42px}.hm-sub{flex-wrap:wrap;gap:10px 18px}}
 /* stat strip — ruled ledger totals instead of 4 boxed KPI cards */
 .statline{display:grid;grid-template-columns:repeat(4,1fr);border-top:1.5px solid var(--ink);border-bottom:1px solid var(--line)}
 .statline .stat{padding:15px 22px 17px;border-left:1px solid var(--line);gap:9px}
@@ -109,6 +121,7 @@ table.mini .src-k{width:1%;white-space:nowrap;padding-right:16px;color:var(--mut
   .statline .stat:nth-child(n+3){border-top:1px solid var(--line)}}
 /* accounting negatives: parenthesised, ink not red — red reserved for exceptions */
 .neg{color:var(--muted)}
+.neg-flag{color:var(--bad);font-weight:600}
 
 /* ---- BUTTON ---- */
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:11px;font-family:inherit;

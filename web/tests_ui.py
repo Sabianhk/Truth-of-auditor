@@ -58,7 +58,7 @@ class DashboardUiTests(TestCase):
     def test_dashboard_folio_dan_rail(self):
         r = self.client.get("/")
         self.assertContains(r, "DASBOR")
-        self.assertContains(r, "hrail")
+        self.assertContains(r, "Batch Rekonsiliasi Terakhir")
         self.assertIn("batches", r.context)
 
     def test_folio_upload_transaksi(self):

@@ -9,6 +9,25 @@
   <p>Ringkasan data terparse &amp; rekonsiliasi untuk <b>{{ active_toko.name }}</b>.</p>
 </div>
 
+{% if hero %}
+<div class="hero-metric reveal">
+  <div class="hm-top">
+    <span class="hm-label">Selisih belum tuntas</span>
+    <a class="hm-batch" href="{% url 'batch_detail' hero.batch.pk %}">Batch #{{ hero.batch.pk }} →</a>
+  </div>
+  <div class="hm-value{% if hero.selisih_total == 0 and hero.tidak_cocok == 0 %} is-ok{% endif %}">
+    <span class="hm-cur">Rp</span><span class="num">{{ hero.selisih_total|floatformat:0|intcomma }}</span>
+  </div>
+  <div class="hm-sub">
+    <span>DP selisih <b class="num">{% if hero.dp_selisih < 0 %}({{ hero.dp_selisih|floatformat:0|cut:"-"|intcomma }}){% else %}{{ hero.dp_selisih|floatformat:0|intcomma }}{% endif %}</b></span>
+    <span>WD selisih <b class="num">{% if hero.wd_selisih < 0 %}({{ hero.wd_selisih|floatformat:0|cut:"-"|intcomma }}){% else %}{{ hero.wd_selisih|floatformat:0|intcomma }}{% endif %}</b></span>
+    {% if hero.tidak_cocok %}<span class="badge bad">{{ hero.tidak_cocok }} tidak cocok</span>
+    {% elif hero.perlu_tinjau %}<span class="badge warn">{{ hero.perlu_tinjau }} perlu tinjau</span>
+    {% else %}<span class="badge ok">seimbang ✓</span>{% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div class="statline">
   <div class="stat reveal"><span class="k">Total Transaksi</span>
     <span class="v num" data-count="{{ tx_total }}">{{ tx_total|intcomma }}</span></div>
@@ -20,19 +39,26 @@
     <span class="v num" data-count="{{ by_source|length }}">{{ by_source|length }}</span></div>
 </div>
 
-<div class="card reveal" style="margin-top:16px;margin-bottom:16px">
-  <div class="h-row"><h3>Batch Rekonsiliasi Terakhir</h3><span class="margin-note">arsip · geser →</span></div>
-  <div class="hrail">
+<div class="card ledger reveal" style="margin-top:28px">
+  <div class="hd"><h3>Batch Rekonsiliasi Terakhir</h3></div>
+  <div class="twrap">
+  <table>
+    <thead><tr><th>Batch</th><th>Periode</th><th class="num">Cocok</th><th class="num">Tinjau</th><th class="num">Tidak</th><th></th></tr></thead>
+    <tbody>
     {% for b in batches %}
-    <a class="card" href="{% url 'batch_detail' b.pk %}" style="box-shadow:none">
-      <div class="muted" style="font-size:12px">Batch <span class="num">#{{ b.pk }}</span></div>
-      <div class="num" style="font-size:20px;font-weight:500;margin:6px 0">{{ b.date_from|date:"d M" }}–{{ b.date_to|date:"d M Y" }}</div>
       {% with s=b.summary %}
-      <span class="badge ok">{{ s.buckets.cocok|default:0 }} cocok</span>
-      <span class="badge warn">{{ s.buckets.perlu_tinjau|default:0 }} tinjau</span>
+      <tr>
+        <td><span class="num">#{{ b.pk }}</span></td>
+        <td>{{ b.date_from|date:"d M" }}–{{ b.date_to|date:"d M Y" }}</td>
+        <td class="num r">{{ s.buckets.cocok|default:0 }}</td>
+        <td class="num r">{{ s.buckets.perlu_tinjau|default:0 }}</td>
+        <td class="num r">{% if s.buckets.tidak_cocok %}<span class="neg-flag">{{ s.buckets.tidak_cocok }}</span>{% else %}<span class="faint">—</span>{% endif %}</td>
+        <td class="r"><a class="btn sm" href="{% url 'batch_detail' b.pk %}">Detail →</a></td>
+      </tr>
       {% endwith %}
-    </a>
-    {% empty %}<span class="muted">Belum ada batch.</span>{% endfor %}
+    {% empty %}<tr><td colspan="6" class="muted">Belum ada batch. <a class="grad-text" href="{% url 'reconcile' %}">Jalankan rekonsiliasi →</a></td></tr>{% endfor %}
+    </tbody>
+  </table>
   </div>
 </div>
 

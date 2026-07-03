@@ -24,7 +24,7 @@
     <table>
       <tr><td>Panel (koin)</td><td class="num">{{ s.dp.panel|default:0|floatformat:0|intcomma }}</td></tr>
       <tr><td>Uang real</td><td class="num">{{ s.dp.money|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td><b>Selisih</b></td><td>{% if s.dp.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn num">{{ s.dp.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
+      <tr><td><b>Selisih</b></td><td>{% if s.dp.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge {{ dp_sev }} num">{% if s.dp.selisih < 0 %}({{ s.dp.selisih|floatformat:0|cut:"-"|intcomma }}){% else %}{{ s.dp.selisih|floatformat:0|intcomma }}{% endif %}</span>{% if dp_sev == 'bad' %} <span class="badge bad">Review</span>{% endif %}{% endif %}</td></tr>
     </table>
   </div>
   <div class="card reveal">
@@ -32,7 +32,7 @@
     <table>
       <tr><td>Panel (koin)</td><td class="num">{{ s.wd.panel|default:0|floatformat:0|intcomma }}</td></tr>
       <tr><td>Uang real</td><td class="num">{{ s.wd.money|default:0|floatformat:0|intcomma }}</td></tr>
-      <tr><td><b>Selisih</b></td><td>{% if s.wd.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge warn num">{{ s.wd.selisih|floatformat:0|intcomma }}</span>{% endif %}</td></tr>
+      <tr><td><b>Selisih</b></td><td>{% if s.wd.selisih == 0 %}<span class="badge ok">Balanced ✓</span>{% else %}<span class="badge {{ wd_sev }} num">{% if s.wd.selisih < 0 %}({{ s.wd.selisih|floatformat:0|cut:"-"|intcomma }}){% else %}{{ s.wd.selisih|floatformat:0|intcomma }}{% endif %}</span>{% if wd_sev == 'bad' %} <span class="badge bad">Review</span>{% endif %}{% endif %}</td></tr>
     </table>
   </div>
 </div>
