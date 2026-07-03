@@ -9,27 +9,15 @@
   <p>Ringkasan data terparse &amp; rekonsiliasi untuk <b>{{ active_toko.name }}</b>.</p>
 </div>
 
-<div class="grid cols-4">
-  <div class="card stat reveal">
-    <div class="top"><span class="k">Total Transaksi</span>
-      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span></div>
-    <div class="v num" data-count="{{ tx_total }}">{{ tx_total|intcomma }}</div>
-  </div>
-  <div class="card stat reveal">
-    <div class="top"><span class="k">File Di-upload</span>
-      <span class="ic g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg></span></div>
-    <div class="v num" data-count="{{ upload_total }}">{{ upload_total|intcomma }}</div>
-  </div>
-  <div class="card stat reveal">
-    <div class="top"><span class="k">Rekonsiliasi</span>
-      <span class="ic a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v16a2 2 0 0 0 2 2h12"/><path d="M18 8l-4-4 4-4"/><path d="M2 12h13a4 4 0 0 1 4 4v4"/></svg></span></div>
-    <div class="v num" data-count="{{ run_total }}">{{ run_total|intcomma }}</div>
-  </div>
-  <div class="card stat reveal">
-    <div class="top"><span class="k">Jenis Sumber</span>
-      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span></div>
-    <div class="v num" data-count="{{ by_source|length }}">{{ by_source|length }}</div>
-  </div>
+<div class="statline">
+  <div class="stat reveal"><span class="k">Total Transaksi</span>
+    <span class="v num" data-count="{{ tx_total }}">{{ tx_total|intcomma }}</span></div>
+  <div class="stat reveal"><span class="k">File Di-upload</span>
+    <span class="v num" data-count="{{ upload_total }}">{{ upload_total|intcomma }}</span></div>
+  <div class="stat reveal"><span class="k">Rekonsiliasi</span>
+    <span class="v num" data-count="{{ run_total }}">{{ run_total|intcomma }}</span></div>
+  <div class="stat reveal"><span class="k">Jenis Sumber</span>
+    <span class="v num" data-count="{{ by_source|length }}">{{ by_source|length }}</span></div>
 </div>
 
 <div class="card reveal" style="margin-top:16px;margin-bottom:16px">
@@ -48,29 +36,28 @@
   </div>
 </div>
 
-<div class="grid cols-2" style="margin-top:16px">
-  <div class="card reveal">
-    <h3>Transaksi per Sumber</h3>
+<div class="grid split reveal" style="margin-top:28px">
+  <div>
+    <div class="hd ruled"><h3>Transaksi per Sumber</h3></div>
+    <table class="mini">
     {% for s in by_source %}
-    <div style="margin-bottom:15px">
-      <div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px">
-        <span><span class="badge src">{{ s.source_type__key }}</span> {{ s.source_type__name }}</span>
-        <b class="num">{{ s.n|intcomma }}</b>
-      </div>
-      <div style="height:8px;border-radius:99px;background:var(--panel-2);overflow:hidden">
-        <div style="height:100%;width:{% widthratio s.n tx_total 100 %}%;background:var(--brand);border-radius:99px"></div>
-      </div>
-    </div>
-    {% empty %}<p class="muted">Belum ada data. <a class="grad-text" href="{% url 'upload' %}">Upload file →</a></p>{% endfor %}
+      <tr>
+        <td class="src-k">{{ s.source_type__key }}</td>
+        <td class="muted">{{ s.source_type__name }}</td>
+        <td class="num r">{{ s.n|intcomma }}</td>
+        <td class="num r faint">{% widthratio s.n tx_total 100 %}%</td>
+      </tr>
+    {% empty %}<tr><td class="muted">Belum ada data. <a class="grad-text" href="{% url 'upload' %}">Upload file →</a></td></tr>{% endfor %}
+    </table>
   </div>
 
-  <div class="card reveal">
-    <h3>Rekonsiliasi Terkini</h3>
+  <div>
+    <div class="hd ruled"><h3>Rekonsiliasi Terkini</h3></div>
     {% for run in runs %}
     <a href="{% url 'run_detail' run.pk %}" style="display:block;padding:13px 0;border-bottom:1px solid var(--line)">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <b style="font-size:14px">{{ run.get_relation_display }}</b>
-        <span class="faint" style="font-size:12px">#{{ run.pk }}</span>
+        <span class="faint num" style="font-size:12px">#{{ run.pk }}</span>
       </div>
       {% if run.summary %}<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <span class="badge ok">{{ run.summary.cocok|intcomma }} cocok</span>

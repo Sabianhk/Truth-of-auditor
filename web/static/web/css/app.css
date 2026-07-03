@@ -73,7 +73,17 @@ a{color:inherit;text-decoration:none}
 /* ---- GRID / CARD ---- */
 .grid{display:grid;gap:16px}
 .cols-2{grid-template-columns:1fr 1fr}.cols-3{grid-template-columns:repeat(3,1fr)}.cols-4{grid-template-columns:repeat(4,1fr)}
-@media(max-width:1000px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3,.cols-2{grid-template-columns:1fr}}
+.split{grid-template-columns:.82fr 1.18fr;gap:34px}
+@media(max-width:1000px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3,.cols-2,.split{grid-template-columns:1fr}}
+/* ledger section heading with a top rule */
+.hd.ruled{border-bottom:1.5px solid var(--ink);padding-bottom:10px;margin-bottom:2px}
+.hd.ruled h3{margin:0}
+/* mini ledger list (trial-balance style) */
+table.mini{width:100%;border-collapse:collapse;font-size:13.5px}
+table.mini td{padding:10px 0;border-bottom:1px solid var(--line);vertical-align:baseline}
+table.mini tr:last-child td{border-bottom:none}
+table.mini .src-k{width:1%;white-space:nowrap;padding-right:16px;color:var(--muted);
+  font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;font-size:12px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
 .card h3{margin:0 0 14px;font-size:15px;font-weight:600;font-family:var(--font-body);letter-spacing:0}
 .card .h-row{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px}
@@ -88,6 +98,15 @@ a{color:inherit;text-decoration:none}
 .stat .k{font-size:12px;color:var(--muted);font-weight:500}
 .stat .v{font-family:var(--font-mono);font-weight:500;font-size:28px;line-height:1;letter-spacing:-.02em}
 .stat .v.g{color:var(--ok)} .stat .v.r{color:var(--bad)}
+/* stat strip — ruled ledger totals instead of 4 boxed KPI cards */
+.statline{display:grid;grid-template-columns:repeat(4,1fr);border-top:1.5px solid var(--ink);border-bottom:1px solid var(--line)}
+.statline .stat{padding:15px 22px 17px;border-left:1px solid var(--line);gap:9px}
+.statline .stat:first-child{border-left:none;padding-left:2px}
+.statline .stat .k{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em}
+.statline .stat .v{font-size:34px}
+@media(max-width:860px){.statline{grid-template-columns:repeat(2,1fr)}
+  .statline .stat:nth-child(3){border-left:none;padding-left:2px}
+  .statline .stat:nth-child(n+3){border-top:1px solid var(--line)}}
 /* accounting negatives: parenthesised, ink not red — red reserved for exceptions */
 .neg{color:var(--muted)}
 
