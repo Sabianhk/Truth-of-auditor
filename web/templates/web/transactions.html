@@ -35,7 +35,7 @@
         <td><span class="badge src">{{ t.source_type.key }}</span></td>
         <td>{{ t.get_jenis_display }}</td>
         <td class="num mono">{{ t.amount|floatformat:0|intcomma }}</td>
-        <td class="num mono" style="color:{% if t.money_delta > 0 %}var(--ok){% elif t.money_delta < 0 %}var(--bad){% else %}var(--faint){% endif %}">{{ t.money_delta|floatformat:0|intcomma }}</td>
+        <td class="num mono">{% if t.money_delta < 0 %}<span class="neg">({{ t.money_delta|floatformat:0|cut:"-"|intcomma }})</span>{% elif t.money_delta > 0 %}{{ t.money_delta|floatformat:0|intcomma }}{% else %}<span class="faint">—</span>{% endif %}</td>
         <td class="num mono">{{ t.ticket_no|default:"—" }}</td>
         <td>{{ t.username|default:"—" }}</td>
         <td class="faint">{{ t.counterparty|truncatechars:26|default:"—" }}</td>
