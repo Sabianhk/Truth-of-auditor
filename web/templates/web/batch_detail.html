@@ -4,6 +4,7 @@
 {% block crumb %}<a href="{% url 'reconcile' %}">Rekonsiliasi</a> · Batch #{{ batch.pk }}{% endblock %}
 {% block folio %}<b>04</b>BATCH{% endblock %}
 {% block content %}
+<div class="case"><div class="case-main">
 <div class="page-head reveal" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
   <div>
     <h1>Batch #{{ batch.pk }} — {{ batch.toko.name }}</h1>
@@ -63,5 +64,14 @@
     </tbody>
   </table>
   </div>
+</div>
+</div>
+<aside class="case-rail" aria-label="Metadata berkas">
+  <div class="cr-item"><span class="cr-k">Berkas</span><span class="cr-v num">BATCH-{{ batch.pk }}</span></div>
+  <div class="cr-item"><span class="cr-k">Toko</span><span class="cr-v">{{ batch.toko.name }}</span></div>
+  <div class="cr-item"><span class="cr-k">Toleransi</span><span class="cr-v">{{ batch.tolerance.name }}</span></div>
+  <div class="cr-item"><span class="cr-k">Dibuat</span><span class="cr-v num">{{ batch.created_at|date:"d/m/Y H:i" }}</span></div>
+  <p class="cr-note">Selisih = koin Panel − uang real. Ditandai <b>Review</b> bila gap &gt; 5% dari total sisi. Balanced ✓ bila nol.</p>
+</aside>
 </div>
 {% endblock %}

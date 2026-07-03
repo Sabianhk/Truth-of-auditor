@@ -4,6 +4,7 @@
 {% block crumb %}<a href="{% url 'reconcile' %}">Rekonsiliasi</a> · <a href="{% url 'batch_detail' run.batch.id %}">Batch #{{ run.batch.id }}</a> · {{ run.get_relation_display }}{% endblock %}
 {% block folio %}<b>04</b>RUN{% endblock %}
 {% block content %}
+<div class="case"><div class="case-main">
 <div class="page-head reveal" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
   <div>
     <h1>{{ run.get_relation_display }}</h1>
@@ -28,8 +29,8 @@
   <a href="?bucket=tidak_cocok" class="{% if bucket == 'tidak_cocok' %}active{% endif %}">Tidak Cocok{% if run.summary %} ({{ run.summary.tidak_cocok|intcomma }}){% endif %}</a>
 </div>
 
-<div class="card pad0 reveal">
-  <div class="table-wrap" style="border:none">
+<div class="card ledger pad0 reveal">
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Status</th><th>Kiri (Panel)</th><th class="num">Amount</th><th>Kanan</th><th class="num">Amount</th><th>Alasan</th><th style="text-align:center">Aksi</th></tr></thead>
     <tbody>
@@ -47,4 +48,14 @@
   {% if page.has_next %}<a class="btn sm" href="?bucket={{ bucket }}&page={{ page.next_page_number }}">Berikutnya →</a>{% endif %}
 </div>
 {% endif %}
+</div>
+<aside class="case-rail" aria-label="Metadata berkas">
+  <div class="cr-item"><span class="cr-k">Berkas</span><span class="cr-v num">RUN-{{ run.pk }}</span></div>
+  <div class="cr-item"><span class="cr-k">Batch</span><span class="cr-v"><a href="{% url 'batch_detail' run.batch.id %}">#{{ run.batch.id }}</a></span></div>
+  <div class="cr-item"><span class="cr-k">Relasi</span><span class="cr-v">{{ run.get_relation_display }}</span></div>
+  <div class="cr-item"><span class="cr-k">Toleransi</span><span class="cr-v">{{ run.tolerance.name }} · ±{{ run.tolerance.date_window_days }}h</span></div>
+  <div class="cr-item"><span class="cr-k">Dibuat</span><span class="cr-v num">{{ run.created_at|date:"d/m/Y H:i" }}</span></div>
+  <p class="cr-note">Kolom kiri = data Panel (koin), kanan = sumber pembanding. Tiap baris dinilai ke bucket cocok / perlu ditinjau / tidak cocok berdasar nominal, tanggal &amp; nama.</p>
+</aside>
+</div>
 {% endblock %}

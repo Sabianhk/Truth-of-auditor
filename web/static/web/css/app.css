@@ -228,6 +228,18 @@ table.flush{border:none} table.flush thead th{background:none}
 .hrail{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 12px;scrollbar-width:thin}
 .hrail>*{scroll-snap-align:start;flex:0 0 300px}
 
+/* Marginalia — dossier metadata rail on detail pages (case-file feel) */
+.case-rail{display:none}
+@media(min-width:1280px){
+  .case{display:grid;grid-template-columns:minmax(0,1fr) 216px;gap:44px;align-items:start}
+  .case-rail{display:block;position:sticky;top:82px;border-top:1.5px solid var(--ink);padding-top:14px}
+}
+.cr-item{display:flex;flex-direction:column;gap:3px;padding:9px 0;border-bottom:1px solid var(--line)}
+.cr-k{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}
+.cr-v{font-size:13.5px;color:var(--ink)}
+.cr-v a{color:var(--brand)}
+.cr-note{margin:16px 0 0;font-size:12px;line-height:1.55;color:var(--faint)}
+
 /* Document frame + margin note */
 @media(min-width:1200px){.content{border-left:1px solid var(--line)}}
 .margin-note{display:none}
