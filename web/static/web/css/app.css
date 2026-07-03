@@ -165,6 +165,7 @@ table.flush{border:none} table.flush thead th{background:none}
 .folio b{font-family:var(--font-display);font-weight:700;font-size:64px;line-height:.8;display:block;
   text-align:right;color:rgba(28,26,21,.028);letter-spacing:-.02em}
 @media(max-width:900px){.folio b{font-size:40px}}
+@media(max-width:600px){.folio{display:none}}
 
 /* Stamp — status chip gaya cap dokumen (menimpa gaya .badge lama) */
 .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:3px;
