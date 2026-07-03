@@ -177,7 +177,9 @@ table.flush{border:none} table.flush thead th{background:none}
   border:1px solid currentColor}
 .badge:before{display:none}
 .badge.ok{color:var(--ok);background:var(--ok-bg)} .badge.warn{color:var(--warn);background:var(--warn-bg)}
-.badge.bad{color:var(--bad);background:var(--bad-bg)} .badge.src{color:#4A4433;background:#ECE7D8}
+.badge.bad{color:var(--bad);background:var(--bad-bg)}
+/* routine categorical tags = quiet mono, not stamped — reserve the stamp for status */
+.badge.src{color:var(--muted);background:none;border:none;padding:0;letter-spacing:.09em}
 
 /* Grain — chrome & empty-state only (data-URI feTurbulence) */
 .grain{position:relative;isolation:isolate}
