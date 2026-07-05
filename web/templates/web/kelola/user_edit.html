@@ -57,7 +57,7 @@
       <form method="post" action="{% url 'delete_user' target.pk %}"
             data-confirm="Hapus PERMANEN pengguna {{ target.username }}? Akun ini tidak bisa dikembalikan.">
         {% csrf_token %}
-        <button class="btn" type="submit" style="color:#dc2828">Hapus Permanen</button>
+        <button class="btn" type="submit" style="color:var(--bad)">Hapus Permanen</button>
       </form>
     </div>
     {% endif %}

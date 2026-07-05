@@ -41,7 +41,7 @@
           <form method="post" action="{% url 'delete_toko' t.id %}" style="display:inline"
                 data-confirm="Hapus PERMANEN Toko {{ t.name }} beserta SEMUA transaksi, upload, dan batch-nya? Tindakan ini tidak bisa dibatalkan.">
             {% csrf_token %}
-            <button class="btn sm" type="submit" style="color:#dc2828">Hapus</button>
+            <button class="btn sm" type="submit" style="color:var(--bad)">Hapus</button>
           </form>
         </td>
       </tr>

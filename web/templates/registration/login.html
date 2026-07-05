@@ -4,46 +4,42 @@
 
 {% block head %}
 <link rel="stylesheet" href="{% static 'web/css/login.css' %}">
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js"}}</script>
 <style>
-  body{overflow:hidden}
   .auth{position:relative;z-index:2;min-height:100vh;display:grid;place-items:center;padding:24px}
-  @media(min-width:860px){.auth{place-items:end start;padding:0 0 9vh 9vw}}
-  .auth-card{width:100%;max-width:415px;background:rgba(18,15,11,.82);backdrop-filter:blur(14px);
-    border:1px solid var(--border2);border-radius:var(--radius);padding:38px 34px;
-    box-shadow:0 44px 130px -30px rgba(0,0,0,.85),inset 0 1px 0 rgba(233,228,214,.06)}
-  .auth-card .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:19px}
-  .auth-card h1{font-size:28px;margin:22px 0 8px;line-height:1.14;overflow:hidden}
-  .auth-card h1 .kin{display:inline-block}
-  .auth-card .sub{color:var(--muted);font-size:14.5px;margin:0 0 26px}
-  .auth-card .btn.primary{width:100%;justify-content:center;padding:13px;font-size:15px;margin-top:6px}
-  .err{background:rgba(208,106,92,.12);color:#E8A493;border:1px solid rgba(208,106,92,.35);
-    padding:10px 13px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:16px}
-  .foot{margin-top:20px;text-align:center;font-size:12.5px;color:var(--faint)}
+  .auth-wrap{width:100%;max-width:400px}
+  .auth-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;margin-bottom:26px}
+  .auth-brand .mark{width:32px;height:32px;border-radius:8px;background:var(--brand);color:#0B0D12;
+    display:grid;place-items:center;font-size:15px;font-weight:700}
+  .auth-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:34px 32px}
+  .auth-card h1{font-size:22px;margin:0 0 6px;line-height:1.25}
+  .auth-card .sub{color:var(--muted);font-size:14px;margin:0 0 24px}
+  .auth-card .btn.primary{width:100%;justify-content:center;padding:12px;font-size:14.5px;margin-top:6px}
+  .err{background:rgba(224,106,94,.13);color:var(--bad);border:1px solid rgba(224,106,94,.35);
+    padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:16px}
+  .foot{margin-top:18px;text-align:center;font-size:12.5px;color:var(--faint)}
 </style>
 {% endblock %}
 
 {% block chrome %}{% endblock %}
 {% block main %}
-<canvas id="gl"></canvas>
-<div id="wordmark-fallback" class="wm-fallback" aria-hidden="true">TRUTH OF AUDITOR</div>
+<div class="login-bg" aria-hidden="true"></div>
 <div class="auth">
-  <div class="auth-card" id="card">
-    <div class="brand"><span class="dot"></span> Truth<span class="grad-text">Auditor</span></div>
-    <h1><span class="kin">Kebenaran <span class="grad-text">koin</span> &amp; <span class="grad-text">uang</span>, dalam satu panel.</span></h1>
-    <p class="sub">Masuk untuk merekonsiliasi Panel, Bracket, Bank &amp; Gateway.</p>
-    {% if form.errors %}<div class="err">Username atau password salah. Coba lagi.</div>{% endif %}
-    <form method="post">
-      {% csrf_token %}
-      <div class="field"><label>Username</label><input name="username" autofocus autocomplete="username"></div>
-      <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password"></div>
-      <button class="btn primary" type="submit">Masuk &rarr;</button>
-      <input type="hidden" name="next" value="{{ next }}">
-    </form>
-    <div class="foot">Truth of Auditor · rekonsiliasi keuangan</div>
+  <div class="auth-wrap">
+    <div class="auth-brand"><span class="mark">T</span> Truth<span class="grad-text">Auditor</span></div>
+    <div class="auth-card" id="card">
+      <h1>Kebenaran <span class="grad-text">koin</span> &amp; <span class="grad-text">uang</span>, dalam satu panel.</h1>
+      <p class="sub">Masuk untuk merekonsiliasi Panel, Bracket, Bank &amp; Gateway.</p>
+      {% if form.errors %}<div class="err">Username atau password salah. Coba lagi.</div>{% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="field"><label>Username</label><input name="username" autofocus autocomplete="username"></div>
+        <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password"></div>
+        <button class="btn primary" type="submit">Masuk &rarr;</button>
+        <input type="hidden" name="next" value="{{ next }}">
+      </form>
+      <div class="foot">Truth of Auditor · rekonsiliasi keuangan</div>
+    </div>
   </div>
 </div>
 {% endblock %}
-{% block scripts %}
-<script type="module" src="{% static 'web/js/login-hero.js' %}"></script>
-{% endblock %}
+{% block scripts %}{% endblock %}
