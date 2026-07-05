@@ -969,6 +969,21 @@ def _refresh_bucket_summaries(run):
         batch.save(update_fields=["summary"])
 
 
+def _bebaskan_konsumsi(tx, batch_id):
+    """Bebaskan consumed_by_batch baris uang yang pasangannya DITOLAK auditor,
+    supaya kembali ke pool aktif (batch lain / re-match bisa memakainya).
+    Hanya bila yang mengonsumsi = batch pemilik run DAN baris tak dipakai
+    MatchResult lain — bukti lain / konsumsi batch lain tetap mengunci.
+    Kembalikan pk transaksi yang dibebaskan, atau None."""
+    if tx is None or batch_id is None or tx.consumed_by_batch_id != batch_id:
+        return None
+    if MatchResult.objects.filter(Q(left=tx) | Q(right=tx)).exists():
+        return None
+    tx.consumed_by_batch = None
+    tx.save(update_fields=["consumed_by_batch"])
+    return tx.pk
+
+
 @login_required
 @require_POST
 def review(request, pk):
@@ -984,12 +999,22 @@ def review(request, pk):
         return HttpResponseBadRequest("Aksi tidak dikenal.")
     r.bucket = buckets[action]
     r.reason_code = "manual_override"
-    r.save(update_fields=["bucket", "reason_code"])
+    fields = ["bucket", "reason_code"]
+    # Menolak pasangan = sisi uang (right) DILEPAS — kalau tidak, uangnya tetap
+    # terhitung matched (_matched_money pakai left+right, bukan bucket) dan
+    # konsumsinya tak pernah bisa dibebaskan.
+    uang = r.right if action == "mark_unmatched" else None
+    if uang is not None:
+        r.right = None
+        fields.append("right")
+    r.save(update_fields=fields)
+    uang_pk = _bebaskan_konsumsi(uang, r.run.batch_id) if uang is not None else None
     ReviewAction.objects.create(result=r, action=action, reason=reason, reviewer=request.user)
     catat(
         request.user, "review", f"Hasil #{r.pk} → {action}",
         toko=r.run.batch.toko if r.run.batch_id else None,
         result_pk=r.pk, action=action, batch_pk=r.run.batch_id,
+        uang_dibebaskan=uang_pk,
     )
     _refresh_bucket_summaries(r.run)
     return render(request, "web/_result_row.html", {"r": r, "bucket_meta": BUCKET_META})
@@ -1012,11 +1037,25 @@ def review_bulk(request):
     ids = request.POST.getlist("result_ids")
     results = list(
         MatchResult.objects.filter(pk__in=ids, run__batch__toko__in=tokos_for(request.user))
+        .select_related("right", "run")
     )
+    # Pasangan yang ditolak: lepas right dulu (bulk), BARU cek konsumsi — dua
+    # target duplikat yang menunjuk uang sama tetap bebas kalau dua-duanya ditolak.
+    uang_kandidat = {}
     for r in results:
         r.bucket = buckets[action]
         r.reason_code = "manual_override"
-    MatchResult.objects.bulk_update(results, ["bucket", "reason_code"], batch_size=500)
+        if action == "mark_unmatched" and r.right_id is not None:
+            uang_kandidat.setdefault(r.right_id, (r.right, r.run.batch_id))
+            r.right = None
+    fields = ["bucket", "reason_code"]
+    if action == "mark_unmatched":
+        fields.append("right")
+    MatchResult.objects.bulk_update(results, fields, batch_size=500)
+    n_bebas = sum(
+        1 for tx, batch_id in uang_kandidat.values()
+        if _bebaskan_konsumsi(tx, batch_id) is not None
+    )
     ReviewAction.objects.bulk_create(
         [ReviewAction(result=r, action=action, reason="review massal", reviewer=request.user)
          for r in results],
@@ -1031,6 +1070,7 @@ def review_bulk(request):
             request.user, "review_massal", f"{len(results)} baris → {action}",
             toko=first_run.batch.toko if first_run.batch_id else None,
             n=len(results), action=action, batch_pk=first_run.batch_id,
+            uang_dibebaskan=n_bebas,
         )
     label = {"mark_matched": "cocok", "mark_review": "perlu ditinjau",
              "mark_unmatched": "tidak cocok"}[action]
