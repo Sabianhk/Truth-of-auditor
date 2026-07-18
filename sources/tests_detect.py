@@ -148,6 +148,69 @@ class DetectTests(SimpleTestCase):
         self.assertEqual(detect_source(p, "x.xlsx"), [])
 
 
+class FilenameOnlySignalTests(SimpleTestCase):
+    """Sinyal nama-file-murni (tanpa dukungan header) tak boleh auto-confirm.
+
+    Ambang konfirmasi upload = 0.8; skor 0.85 dari sekadar nama file pernah
+    merutekan file ke parser salah tanpa konfirmasi (kelas bug nyata 16-07).
+    """
+
+    def test_nama_qris_header_asing_di_bawah_ambang(self):
+        path = _xlsx([["Foo", "Bar"], ["x", "y"]])
+        try:
+            hasil = detect_source(path, "REKAP QRIS JULI.xlsx")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "qrflyer")
+        self.assertLess(hasil[0]["confidence"], 0.8)
+
+    def test_nama_mandiri_header_asing_di_bawah_ambang(self):
+        path = _xlsx([["Foo", "Bar"], ["x", "y"]])
+        try:
+            hasil = detect_source(path, "mutasi mandiri juli.xlsx")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "mandiri")
+        self.assertLess(hasil[0]["confidence"], 0.8)
+
+    def test_nama_bca_isi_asing_di_bawah_ambang(self):
+        path = _csv("kolom1,kolom2\nnilai1,nilai2\n")
+        try:
+            hasil = detect_source(path, "rekap bca juli.csv")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "bca_csv")
+        self.assertLess(hasil[0]["confidence"], 0.8)
+
+    def test_header_qris_di_dalam_file_tetap_auto(self):
+        # Token "qris" DI DALAM file = sinyal isi, bukan nama-file-murni.
+        path = _xlsx([["Laporan QRIS"], ["kolomA", "kolomB"]])
+        try:
+            hasil = detect_source(path, "laporan.xlsx")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "qrflyer")
+        self.assertGreaterEqual(hasil[0]["confidence"], 0.8)
+
+    def test_header_bca_csv_tetap_auto(self):
+        path = _csv("Rekening\nTanggal,Keterangan,Cabang,Jumlah,,Saldo\n")
+        try:
+            hasil = detect_source(path, "mutasi.csv")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "bca_csv")
+        self.assertGreaterEqual(hasil[0]["confidence"], 0.8)
+
+    def test_header_estatement_mandiri_tetap_auto(self):
+        path = _xlsx([["e-Statement"], ["No", "Tanggal", "Keterangan"]])
+        try:
+            hasil = detect_source(path, "laporan.xlsx")
+        finally:
+            os.remove(path)
+        self.assertEqual(hasil[0]["parser_key"], "mandiri")
+        self.assertGreaterEqual(hasil[0]["confidence"], 0.8)
+
+
 class PDFKeyRoutingTests(SimpleTestCase):
     def test_bni_dari_teks(self):
         txt = ("HISTORI TRANSAKSI\nRekening: TAPLUS DIGITAL\n"

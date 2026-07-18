@@ -92,10 +92,16 @@ def detect_source(path, filename=""):
             add("bracket", 0.95)
         if _has(t, "client reference") and (_has(t, "settlement time") or _has(t, "txn id")):
             add("qrflyer", 0.90)
-        if _has(t, "qris") or _has(t, "qr flyer") or "qrflyer" in fn or "qris" in fn or "qr flyer" in fn:
+        # Sinyal nama-file-murni (tanpa dukungan header) = 0.75, di bawah ambang
+        # konfirmasi 0.8: nama file saja tak boleh merutekan parser tanpa tanya.
+        if _has(t, "qris") or _has(t, "qr flyer"):
             add("qrflyer", 0.85)
-        if _has(t, "e-statement") or _has(t, "rekening koran") or "mandiri" in fn:
+        elif "qrflyer" in fn or "qris" in fn or "qr flyer" in fn:
+            add("qrflyer", 0.75)
+        if _has(t, "e-statement") or _has(t, "rekening koran"):
             add("mandiri", 0.80)
+        elif "mandiri" in fn:
+            add("mandiri", 0.75)
         if _has(t, "orderid") and _has(t, "grandtotal") and _has(t, "branchnominal"):
             add("cor_qris_gateway", 0.95)
         if _has(t, "order id (merchant)") and (_has(t, "recipientname") or _has(t, "accountnumber")):
@@ -111,8 +117,10 @@ def detect_source(path, filename=""):
         c = _csv_text(path)
         if "mutasi_debet" in c or "mutasi_kredit" in c or "tgl_tran" in c:
             add("bri", 0.95)
-        if ("cabang" in c and "keterangan" in c and "saldo" in c) or "bca" in fn:
+        if "cabang" in c and "keterangan" in c and "saldo" in c:
             add("bca_csv", 0.85)
+        elif "bca" in fn:  # nama file saja -> di bawah ambang konfirmasi 0.8
+            add("bca_csv", 0.75)
         if "customer username" in c and "acquirer merchant" in c:
             add("rpay", 0.95)
         if "external id" in c and "disbursed amount" in c and "transfer status" in c:
