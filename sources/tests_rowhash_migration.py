@@ -240,3 +240,74 @@ class RecomputeAllTests(TestCase):
         t.refresh_from_db()
         self.assertEqual(t.row_hash, "hash-bri-lama")
         self.assertEqual(stats["updated"], 0)
+
+
+class RemapBerantaiTests(TestCase):
+    """W7-2: remap BERANTAI — baris B pindah ke hash yang baru DITINGGALKAN
+    baris A pada run yang sama (idx global bca_pdf memampat ke occurrence:
+    old idx A=1 → occ 0, old idx B=7 → occ 1 == hash lama A). Postgres
+    mengecek unique constraint per-baris (non-deferrable) di dalam SATU
+    statement UPDATE dan urutan tulisnya tak dijamin: klaim B bisa dicek
+    selagi A belum pindah → unique violation. Penerapan wajib DUA FASE
+    (parkir semua ke hash sementara unik → tulis hash final), dan hash
+    sementara tak boleh bocor ke hasil akhir."""
+
+    def setUp(self):
+        self.toko = Toko.objects.get(key="lbs")
+        self.bank = SourceType.objects.get_or_create(
+            key="bank", defaults={"name": "Bank"}
+        )[0]
+        self.up = Upload.objects.create(source_type=self.bank, toko=self.toko)
+
+    def _tx(self, rh, raw):
+        return Transaction.objects.create(
+            upload=self.up, source_type=self.bank, toko=self.toko,
+            jenis="depo", amount=Decimal("1000"), money_delta=Decimal("1000"),
+            occurred_at=datetime(2026, 6, 27, 10, 0), row_hash=rh, raw=raw,
+        )
+
+    def test_remap_berantai_dua_fase_tanpa_bocor_temp(self):
+        raw = {"date": "01/07/2026",
+               "line": "TRSF E-BANKING CR 100,000.00BUDI 100,000.00 CR",
+               "cont": ""}
+        exp = recompute_bca_pdf_hashes([(1, dict(raw)), (2, dict(raw))])
+        baru_a, baru_b = exp[1], exp[2]  # occ 0, occ 1
+        # Rantai: baris A (pk kecil) SEDANG memegang hash final milik B —
+        # hash lama A (idx global 1) == hash baru B (occ 1). A harus pindah
+        # dulu (baru_b→baru_a) sebelum B boleh klaim baru_b.
+        a = self._tx(baru_b, dict(raw))
+        b = self._tx("hash-idx-global-lama-7", dict(raw))
+
+        from django.db.models import QuerySet
+
+        pelanggaran = []
+        asli = QuerySet.bulk_update
+
+        def cek_unique_per_baris(qs, objs, fields, **kw):
+            # Simulasi constraint unique NON-deferrable: hash yang ditulis
+            # dalam satu statement tak boleh sama dgn hash TERSIMPAN baris
+            # LAIN (pre-state) — persis kondisi yang membuat Postgres bisa
+            # menolak tergantung urutan tulis internal.
+            objs = list(objs)
+            if "row_hash" in fields:
+                pra = dict(Transaction.objects.values_list("pk", "row_hash"))
+                for o in objs:
+                    pemilik = {pk for pk, h in pra.items()
+                               if h == o.row_hash and pk != o.pk}
+                    if pemilik:
+                        pelanggaran.append((o.pk, o.row_hash, pemilik))
+            return asli(qs, objs, fields, **kw)
+
+        with patch.object(QuerySet, "bulk_update", cek_unique_per_baris):
+            stats = recompute_all(Transaction)
+
+        self.assertEqual(pelanggaran, [])  # tak ada klaim hash yang masih dipegang
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual(a.row_hash, baru_a)
+        self.assertEqual(b.row_hash, baru_b)  # rantai selesai di hash final
+        self.assertEqual(stats["updated"], 2)
+        # Hash sementara tak pernah bocor ke hasil akhir.
+        self.assertFalse(
+            Transaction.objects.filter(row_hash__startswith="mig0010:").exists()
+        )

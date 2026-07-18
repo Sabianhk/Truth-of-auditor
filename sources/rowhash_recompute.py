@@ -189,6 +189,21 @@ def recompute_all(Transaction):
                 t.pk: t
                 for t in Transaction.objects.filter(pk__in=[pk for pk, _ in chunk])
             }
+            # W7-2: remap bisa BERANTAI (B mengklaim hash yang baru
+            # ditinggalkan A pada run yang sama; terjadi saat idx global
+            # memampat ke occurrence). Postgres mengecek unique constraint
+            # per-baris (non-deferrable) dan urutan tulis dalam SATU statement
+            # tak dijamin → klaim B bisa dicek selagi A belum pindah = unique
+            # violation. DUA FASE: parkir semua baris chunk ke hash sementara
+            # yang mustahil tabrakan (bukan hexdigest — mengandung ':', unik
+            # per pk, muat max_length=64), lalu tulis hash final. Rantai
+            # LINTAS chunk aman tanpa fase global: guard live di atas hanya
+            # meloloskan klaim setelah pemilik lamanya diproses lebih dulu
+            # (urut pk), jadi pelepas selalu berada di chunk yang sama/lebih
+            # awal dari pengklaim.
+            for pk, _new in chunk:
+                objs[pk].row_hash = f"mig0010:{pk}"
+            Transaction.objects.bulk_update(list(objs.values()), ["row_hash"])
             for pk, new in chunk:
                 objs[pk].row_hash = new
             Transaction.objects.bulk_update(list(objs.values()), ["row_hash"])
