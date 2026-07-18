@@ -26,11 +26,30 @@ class ReviewRefreshSummaryTests(TestCase):
             relation=MatchRun.Relation.PANEL_BANK, tolerance=self.tol, batch=self.batch,
             summary={"cocok": 0, "perlu_tinjau": 2, "tidak_cocok": 0},
         )
+        # Hasil BERPASANGAN (guard W1-6a: mark_matched butuh baris uang).
+        from datetime import datetime
+        from decimal import Decimal
+
+        from sources.models import SourceType, Upload
+        from transactions.models import Transaction
+
+        bank = SourceType.objects.get_or_create(key="bank", defaults={"name": "Bank"})[0]
+        up_b = Upload.objects.create(source_type=bank, toko=self.lbs)
+
+        def _uang(rh, jam):
+            return Transaction.objects.create(
+                upload=up_b, source_type=bank, toko=self.lbs, jenis="depo",
+                amount=Decimal("50000"), money_delta=Decimal("50000"),
+                occurred_at=datetime(2026, 6, 27, jam, 0), row_hash=rh,
+            )
+
         self.r1 = MatchResult.objects.create(
-            run=self.run, bucket=MatchResult.Bucket.TINJAU, reason_code="weak_name"
+            run=self.run, bucket=MatchResult.Bucket.TINJAU, reason_code="weak_name",
+            right=_uang("rr-b1", 10),
         )
         self.r2 = MatchResult.objects.create(
-            run=self.run, bucket=MatchResult.Bucket.TINJAU, reason_code="weak_name"
+            run=self.run, bucket=MatchResult.Bucket.TINJAU, reason_code="weak_name",
+            right=_uang("rr-b2", 11),
         )
 
     def test_review_tunggal_menyegarkan_summary_run_dan_batch(self):

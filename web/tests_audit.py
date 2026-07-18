@@ -43,9 +43,15 @@ class _Base(TestCase):
             relation=MatchRun.Relation.PANEL_BANK, tolerance=self.tol, batch=batch,
             date_from=date(2026, 6, 28), date_to=date(2026, 6, 28),
         )
+        # Hasil BERPASANGAN (guard W1-6a: mark_matched butuh baris uang).
+        tx2 = Transaction.objects.create(
+            upload=up, source_type=self.bank, toko=self.lbs, jenis="depo",
+            amount=Decimal("50000"), money_delta=Decimal("50000"),
+            occurred_at=datetime(2026, 6, 28, 11, 0), row_hash="au2",
+        )
         r = MatchResult.objects.create(
-            run=run, bucket=MatchResult.Bucket.TIDAK, left=tx, score=0,
-            reason_code="no_money",
+            run=run, bucket=MatchResult.Bucket.TINJAU, left=tx, right=tx2,
+            score=80, reason_code="name_partial",
         )
         return batch, run, r
 

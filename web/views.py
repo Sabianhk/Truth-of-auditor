@@ -785,7 +785,11 @@ def batch_detail(request, pk):
 
     from transactions.models import specific_source_label
 
-    paired_q = MatchResult.objects.filter(left__isnull=False, right_id=OuterRef("id"))
+    # Bucket TIDAK dikecualikan: pasangan yang DITOLAK auditor (mark_unmatched)
+    # bukan pasangan — uangnya harus tampil lagi sebagai "tanpa pasangan".
+    paired_q = MatchResult.objects.filter(
+        left__isnull=False, right_id=OuterRef("id")
+    ).exclude(bucket=MatchResult.Bucket.TIDAK)
     money_rows = (
         Transaction.objects.filter(
             consumed_by_batch=batch, source_type__key__in=["bank", "gateway"]
@@ -851,7 +855,10 @@ def batch_uang(request, pk):
 
     batch = get_object_or_404(ReconBatch, pk=pk, toko__in=tokos_for(request.user))
     batch_no = ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count()
-    paired = MatchResult.objects.filter(left__isnull=False, right_id=OuterRef("id"))
+    # Pasangan DITOLAK (bucket TIDAK) bukan pasangan — lihat batch_detail.
+    paired = MatchResult.objects.filter(
+        left__isnull=False, right_id=OuterRef("id")
+    ).exclude(bucket=MatchResult.Bucket.TIDAK)
     rows = list(
         Transaction.objects.filter(
             consumed_by_batch=batch, source_type__key__in=["bank", "gateway"]
@@ -1604,20 +1611,36 @@ def bulk_review(request, pk):
         return HttpResponseBadRequest("Aksi tidak dikenal.")
     ids = [i for i in request.POST.getlist("result_ids") if i.isdigit()]
     rows = list(MatchResult.objects.filter(run=run, id__in=ids))
+    updated, skipped = [], 0
     for r in rows:
+        # Guard W1-6a: cocok tanpa baris uang pasangan = akuntansi bohong.
+        if action == "mark_matched" and r.right_id is None:
+            skipped += 1
+            continue
+        was_no_money = r.reason_code == "no_money"
         r.bucket = buckets[action]
         r.reason_code = "manual_override"
         r.save(update_fields=["bucket", "reason_code"])
+        # Guard W1-6b: override no_money mengeluarkan baris dari carry-over —
+        # konsumsi left aktif ke batch asal agar tidak di-match ganda nanti.
+        if was_no_money and r.left_id and run.batch_id:
+            Transaction.objects.filter(
+                pk=r.left_id, consumed_by_batch__isnull=True
+            ).update(consumed_by_batch=run.batch)
         ReviewAction.objects.create(
             result=r, action=action, reason="bulk", reviewer=request.user
         )
-    if rows:
-        catat(request.user, "review_massal", f"{len(rows)} hasil",
+        updated.append(r)
+    if updated:
+        catat(request.user, "review_massal", f"{len(updated)} hasil",
               toko=run.batch.toko if run.batch else None,
-              run_pk=run.pk, n=len(rows), action=action)
+              run_pk=run.pk, n=len(updated), action=action)
         if run.batch:  # kartu Cocok/Tinjau run & batch jangan basi terhadap chip live
             refresh_batch_summary(run.batch)
-    messages.success(request, f"{len(rows)} hasil diperbarui.")
+    msg = f"{len(updated)} hasil diperbarui."
+    if skipped:
+        msg += f" {skipped} dilewati — tanpa pasangan uang, tak bisa ditandai cocok."
+    messages.success(request, msg)
     nxt = request.POST.get("next") or reverse("run_detail", args=[run.pk])
     if not url_has_allowed_host_and_scheme(
         nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
@@ -1639,13 +1662,31 @@ def review(request, pk):
     }
     if action not in buckets:
         return HttpResponseBadRequest("Aksi tidak dikenal.")
-    # Catatan: override pada hasil no_money yang barisnya masih AKTIF (menunggu
-    # settlement) mengeluarkannya dari carry-over — baris itu akan diperlakukan
-    # sebagai baris baru di run berikutnya. Follow-up kecil bila jadi masalah:
-    # konsumsi baris ke batch asalnya saat di-override.
+    # Guard W1-6a: cocok tanpa baris uang pasangan = akuntansi bohong.
+    if action == "mark_matched" and r.right_id is None:
+        return HttpResponseBadRequest(
+            "Tidak bisa menandai cocok: hasil ini tidak punya baris uang pasangan."
+        )
+    was_no_money = r.reason_code == "no_money"
     r.bucket = buckets[action]
     r.reason_code = "manual_override"
     r.save(update_fields=["bucket", "reason_code"])
+    # Guard W1-6b: override pada hasil no_money yang barisnya masih AKTIF
+    # (menunggu settlement) mengeluarkannya dari carry-over — konsumsi left ke
+    # batch asal supaya tidak di-carry ulang / di-match ganda run berikutnya.
+    if was_no_money and r.left_id and r.run.batch_id:
+        Transaction.objects.filter(
+            pk=r.left_id, consumed_by_batch__isnull=True
+        ).update(consumed_by_batch=r.run.batch)
+    # Guard W1-6c: mark_unmatched pada hasil BERPASANGAN → bebaskan uangnya
+    # (bisa di-match ulang) bila dikonsumsi batch milik hasil ini (batch run
+    # atau batch resolver late-settlement). Pasangan tetap tercatat utk audit.
+    if action == "mark_unmatched" and r.right_id:
+        own = [b for b in (r.run.batch_id, r.resolved_by_batch_id) if b]
+        if own:
+            Transaction.objects.filter(
+                pk=r.right_id, consumed_by_batch_id__in=own
+            ).update(consumed_by_batch=None)
     ReviewAction.objects.create(result=r, action=action, reason=reason, reviewer=request.user)
     catat(request.user, "review", f"Result #{r.pk}",
           toko=r.run.batch.toko if r.run.batch else None, result_pk=r.pk, action=action)

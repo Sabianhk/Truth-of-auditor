@@ -66,6 +66,15 @@ class ReviewQueueTests(TestCase):
 
     def test_aksi_review_dari_antrean(self):
         res = self._tinjau(self.lbs, "D-LBS")
+        # Guard W1-6a: mark_matched butuh pasangan uang — beri right.
+        bank = SourceType.objects.get_or_create(key="bank", defaults={"name": "Bank"})[0]
+        up_b = Upload.objects.create(source_type=bank, toko=self.lbs)
+        res.right = Transaction.objects.create(
+            upload=up_b, source_type=bank, toko=self.lbs, jenis="depo",
+            amount=Decimal("50000"), money_delta=Decimal("50000"),
+            occurred_at=datetime(2026, 6, 27, 11, 0), row_hash=f"q-{next(_seq)}",
+        )
+        res.save(update_fields=["right"])
         r = self.client.post(
             reverse("review", args=[res.pk]),
             {"action": "mark_matched", "show_run_col": "1"},
