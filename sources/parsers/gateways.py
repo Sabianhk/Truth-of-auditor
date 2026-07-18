@@ -192,7 +192,10 @@ class RPayGatewayParser(BaseParser):
                 "description": f"RPay {r.get('RRN', '')}".strip(),
                 "raw": {k: ("" if v is None else str(v)) for k, v in r.items() if k},
             }
-            row["row_hash"] = row_hash("rpay", [uuid, amt])
+            # UUID unik per transaksi — TANPA nominal (pola sama rpay_wd)
+            # supaya idempotensi tak goyah oleh variasi format angka
+            # ("25000" vs "25000.0" vs "25000.00").
+            row["row_hash"] = row_hash("rpay", [uuid])
             out.append(row)
         return out
 

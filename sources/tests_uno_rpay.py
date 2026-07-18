@@ -151,6 +151,20 @@ class RPayGatewayTests(SimpleTestCase):
         self.assertEqual(h1, h1b)
         self.assertNotEqual(h1, h2)
 
+    def test_row_hash_kebal_variasi_format_nominal(self):
+        # Hash = UUID saja (pola sama rpay_wd): "25000" vs "25000.00" adalah
+        # transaksi yang SAMA — variasi format angka ekspor tak boleh
+        # menggoyahkan idempotensi.
+        a = ('1,NOMINA ISI ULANG,kaleng1,kaleng1,"09 Jul 2026, 23:59",'
+             '93c8f884-bd54-445f-96df-e899a660cb64,46645580,619180666745,'
+             'Thundfire Game,49s,49,25000,325.0,success')
+        b = ('1,NOMINA ISI ULANG,kaleng1,kaleng1,"09 Jul 2026, 23:59",'
+             '93c8f884-bd54-445f-96df-e899a660cb64,46645580,619180666745,'
+             'Thundfire Game,49s,49,25000.00,325.0,success')
+        self.assertEqual(
+            self._parse([a])[0]["row_hash"], self._parse([b])[0]["row_hash"]
+        )
+
 
 class RPayHardeningTests(SimpleTestCase):
     """Temuan review codex: normalisasi tanda & tanggal ambigu."""
