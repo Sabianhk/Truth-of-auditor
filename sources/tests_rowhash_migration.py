@@ -311,3 +311,92 @@ class RemapBerantaiTests(TestCase):
         self.assertFalse(
             Transaction.objects.filter(row_hash__startswith="mig0010:").exists()
         )
+
+
+class BracketProvenanceTests(TestCase):
+    """W7-3: provenance reader baris bracket. File yang dulu diparse reader
+    mentah fallback (styles rusak) memberi "" utk sel kosong — parser meng-hash
+    "" — sedangkan openpyxl membaca None (str(None)="None" ikut di-hash).
+    Recompute menentukan provenance dgn MEREPRODUKSI row_hash tersimpan di
+    bawah dua asumsi (kosong→None vs kosong→"") atas formula LAMA; asumsi yang
+    cocok dipakai utk hash formula BARU. Tak ada yang cocok → baris dilewati
+    (jangan menebak) + dihitung di stats."""
+
+    RAW = {"Transaction ID": "", "Description": "Beban Admin QRIS",
+           "Username": "", "Total": "-5000",
+           "Tanggal": "27/06/2026", "Jam": "10:00"}
+
+    def setUp(self):
+        self.toko = Toko.objects.get(key="lbs")
+        self.bracket = SourceType.objects.get_or_create(
+            key="bracket", defaults={"name": "Bracket"}
+        )[0]
+        self.up = Upload.objects.create(source_type=self.bracket, toko=self.toko)
+
+    def _tx(self, rh, raw):
+        return Transaction.objects.create(
+            upload=self.up, source_type=self.bracket, toko=self.toko,
+            jenis="admin", amount=Decimal("5000"), money_delta=Decimal("-5000"),
+            occurred_at=datetime(2026, 6, 27, 10, 0), row_hash=rh, raw=raw,
+        )
+
+    def test_provenance_reader_mentah_hash_baru_pakai_string_kosong(self):
+        # Hash lama era awal dihitung reader mentah: sel kosong = "".
+        old = row_hash("bracket", ["", "", "", Decimal("5000")])
+        t = self._tx(old, dict(self.RAW))
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        # Formula baru DI BAWAH ASUMSI YANG SAMA ("" utk sel kosong) — hash
+        # yang akan direproduksi parser saat file yang sama di-upload ulang.
+        self.assertEqual(t.row_hash, row_hash(
+            "bracket",
+            ["", "", "", Decimal("5000"), "27/06/2026", "10:00", "Beban Admin QRIS"],
+        ))
+        self.assertEqual(stats["updated"], 1)
+
+    def test_provenance_openpyxl_tetap_benar(self):
+        old = row_hash("bracket", [None, "", "", Decimal("5000")])
+        t = self._tx(old, dict(self.RAW))
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        self.assertEqual(t.row_hash, recompute_bracket_hash(self.RAW))
+        self.assertEqual(t.row_hash, row_hash(
+            "bracket",
+            [None, "", "", Decimal("5000"), "27/06/2026", "10:00", "Beban Admin QRIS"],
+        ))
+        self.assertEqual(stats["updated"], 1)
+
+    def test_provenance_tak_terbukti_dilewati_dan_dihitung(self):
+        t = self._tx("hash-tak-dikenal-formula-mana-pun", dict(self.RAW))
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        self.assertEqual(t.row_hash, "hash-tak-dikenal-formula-mana-pun")
+        self.assertEqual(stats["provenance_unknown"], 1)
+        self.assertEqual(stats["updated"], 0)
+
+    def test_era_ticket_re_lama_manual_branch_tetap_teremap(self):
+        # Era antara: cabang manual sudah ada, TICKET_RE masih 6-9 digit —
+        # ticket 10 digit tak terdeteksi → dulu jatuh ke cabang manual.
+        raw = {"Transaction ID": "", "Description": "Deposit D1234567890 budi",
+               "Username": "budi", "Total": "50000",
+               "Tanggal": "27/06/2026", "Jam": "10:00"}
+        old = row_hash("bracket", [
+            None, "", "budi", Decimal("50000"),
+            "27/06/2026", "10:00", "Deposit D1234567890 budi",
+        ])
+        t = self._tx(old, raw)
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        # Formula baru: ticket terdeteksi → keluar dari cabang manual.
+        self.assertEqual(t.row_hash, row_hash(
+            "bracket", [None, "D1234567890", "budi", Decimal("50000")]
+        ))
+        self.assertEqual(stats["updated"], 1)
+
+    def test_sudah_formula_baru_tak_disentuh(self):
+        t = self._tx(recompute_bracket_hash(self.RAW), dict(self.RAW))
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        self.assertEqual(t.row_hash, recompute_bracket_hash(self.RAW))
+        self.assertEqual(stats["unchanged"], 1)
+        self.assertEqual(stats["updated"], 0)

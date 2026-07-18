@@ -19,7 +19,7 @@ def forwards(apps, schema_editor):
 
     Transaction = apps.get_model("transactions", "Transaction")
     stats = recompute_all(Transaction)
-    if stats["updated"] or stats["collision"]:
+    if stats["updated"] or stats["collision"] or stats.get("provenance_unknown"):
         print(f"\n  recompute row_hash: {stats}")
 
 
