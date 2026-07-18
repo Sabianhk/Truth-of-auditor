@@ -92,6 +92,34 @@ class XlsxSafeTests(SimpleTestCase):
             os.remove(path)
         self.assertEqual(rows, [["", "x", "y"]])
 
+    def test_cap_dekompresi_zip_bomb(self):
+        # xlsx kecil bisa mengembang GB saat dekompresi (zip-bomb). ZipInfo
+        # dipalsukan besar via patch getinfo — ukuran diperiksa SEBELUM read.
+        from unittest.mock import patch
+        path = _make_nodim_xlsx()
+        real_getinfo = zipfile.ZipFile.getinfo
+
+        def _bengkak(self, name):
+            info = real_getinfo(self, name)
+            info.file_size = 200 * 1024 * 1024  # 200MB > cap 150MB
+            return info
+
+        try:
+            with patch.object(zipfile.ZipFile, "getinfo", _bengkak):
+                with self.assertRaises(ValueError) as ctx:
+                    _raw_xlsx_rows(path)
+        finally:
+            os.remove(path)
+        self.assertIn("terlalu besar", str(ctx.exception))
+
+    def test_file_normal_di_bawah_cap_tetap_terbaca(self):
+        path = _make_nodim_xlsx()
+        try:
+            rows = _raw_xlsx_rows(path)
+        finally:
+            os.remove(path)
+        self.assertEqual(rows[0][:2], ["Transaction ID", "Amount"])
+
     def test_wellformed_data_mempertahankan_nilai_typed(self):
         # File well-formed dengan baris data TIDAK boleh jatuh ke raw reader (yang
         # mengembalikan string) — nilai typed (float/datetime) harus utuh.

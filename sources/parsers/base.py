@@ -48,6 +48,11 @@ def _xlsx_col_idx(ref):
     return n - 1
 
 
+# Cap total ukuran terdekompresi sheet + sharedStrings (zip-bomb: xlsx kecil
+# bisa mengembang GB saat di-read penuh ke memori).
+_XLSX_MAX_UNCOMPRESSED = 150 * 1024 * 1024
+
+
 def _raw_xlsx_rows(path, nrows=None):
     """Baca xlsx via zip+xml langsung (abaikan styles.xml). -> list[list[str]]."""
     with zipfile.ZipFile(path) as z:
@@ -57,6 +62,13 @@ def _raw_xlsx_rows(path, nrows=None):
             cand = sorted(n for n in names
                           if n.startswith("xl/worksheets/") and n.endswith(".xml"))
             sheet = cand[0] if cand else None
+        total = sum(
+            z.getinfo(n).file_size
+            for n in (sheet, "xl/sharedStrings.xml")
+            if n and n in names
+        )
+        if total > _XLSX_MAX_UNCOMPRESSED:
+            raise ValueError("xlsx terlalu besar setelah dekompresi")
         sst = []
         if "xl/sharedStrings.xml" in names:
             for _, el in ET.iterparse(io.BytesIO(z.read("xl/sharedStrings.xml"))):
