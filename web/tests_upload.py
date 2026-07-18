@@ -59,8 +59,15 @@ class UploadCommitTests(TestCase):
         self.lbs = Toko.objects.get(key="lbs")
         self.client.post(reverse("set_toko"), {"toko_id": self.lbs.id})
 
+    def _stage_in_session(self, staged):
+        """Daftarkan path staging ke sesi seolah hasil analyze (kontrak W3-1)."""
+        session = self.client.session
+        session["staged_paths"] = session.get("staged_paths", []) + [staged]
+        session.save()
+
     def test_commit_ingests_and_sets_toko(self):
         staged = default_storage.save("staging/x.csv", ContentFile(b"dummy"))
+        self._stage_in_session(staged)
         with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False):
             r = self.client.post(reverse("upload"), {
                 "action": "commit", "staged": [staged],
@@ -85,6 +92,68 @@ class UploadCommitTests(TestCase):
         self.assertEqual(r.status_code, 302)  # redirect, tidak crash
         self.assertEqual(Upload.objects.count(), n_up)  # tidak ada upload dibuat
         self.assertEqual(Transaction.objects.count(), n_tx)
+
+    def test_commit_menolak_path_tanpa_analyze_di_sesi(self):
+        """W3-1: path staging yang tak pernah dianalisa di sesi ini ditolak —
+        file TIDAK terhapus (cegah user menghapus/commit staging user lain)."""
+        staged = default_storage.save("staging/milik-lain.csv", ContentFile(b"dummy"))
+        try:
+            n_up = Upload.objects.count()
+            with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False), \
+                    patch("web.views.ingest", side_effect=AssertionError("must not ingest")):
+                r = self.client.post(reverse("upload"), {
+                    "action": "commit", "staged": [staged],
+                    "parser_key": ["dummy"], "flow": [""], "provider": "Nexus",
+                })
+            self.assertEqual(r.status_code, 302)
+            self.assertEqual(Upload.objects.count(), n_up)
+            self.assertTrue(default_storage.exists(staged),
+                            "file staging milik sesi lain tidak boleh terhapus")
+        finally:
+            if default_storage.exists(staged):
+                default_storage.delete(staged)
+
+    def test_commit_membersihkan_path_dari_sesi(self):
+        staged = default_storage.save("staging/x.csv", ContentFile(b"dummy"))
+        self._stage_in_session(staged)
+        with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False):
+            self.client.post(reverse("upload"), {
+                "action": "commit", "staged": [staged],
+                "parser_key": ["dummy"], "flow": [""], "provider": "Nexus",
+            })
+        self.assertNotIn(staged, self.client.session.get("staged_paths", []))
+
+    def test_alur_analyze_lalu_commit_tetap_jalan(self):
+        """Alur normal: analyze mendaftarkan path ke sesi → commit diterima."""
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        staged = r.context["preview"][0]["staged"]
+        self.assertIn(staged, self.client.session.get("staged_paths", []))
+        r2 = self.client.post(reverse("upload"), {
+            "action": "commit", "staged": [staged],
+            "parser_key": ["bri"], "flow": [""],
+        })
+        self.assertEqual(r2.status_code, 302)
+        self.assertFalse(default_storage.exists(staged))
+        self.assertNotIn(staged, self.client.session.get("staged_paths", []))
+
+    def test_analyze_berulang_menambah_daftar_sesi(self):
+        """Analyze bisa dipanggil berkali-kali — daftar path sesi akumulatif."""
+        for nama in ("a.csv", "b.csv"):
+            f = SimpleUploadedFile(
+                nama,
+                b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+                content_type="text/csv",
+            )
+            self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        paths = self.client.session.get("staged_paths", [])
+        self.assertEqual(len(paths), 2)
+        for p in paths:
+            default_storage.delete(p)
 
     def test_commit_rejects_path_traversal(self):
         n_up = Upload.objects.count()

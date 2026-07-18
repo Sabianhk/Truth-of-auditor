@@ -384,9 +384,21 @@ def upload(request):
         flows = request.POST.getlist("flow")
         passwords = request.POST.getlist("password")
         provider = request.POST.get("provider", "")
+        # Staging terikat sesi: commit hanya menerima path yang dianalisa di
+        # sesi INI (daftar diisi saat analyze). Tanpa ini, siapa pun yang login
+        # bisa commit + menghapus file staging user lain (nama file bank mudah
+        # ditebak; suffix acak Django hanya muncul saat tabrakan nama).
+        allowed = list(request.session.get("staged_paths", []))
         n_ok = n_err = 0
         for i, (path_rel, key, flow) in enumerate(zip(staged, keys, flows)):
             if not path_rel.startswith("staging/") or ".." in path_rel:
+                n_err += 1
+                continue
+            if path_rel not in allowed:
+                messages.error(
+                    request,
+                    f"{path_rel}: bukan hasil analisa sesi ini — ditolak, ulangi analisa.",
+                )
                 n_err += 1
                 continue
             if key not in PARSERS:
@@ -405,6 +417,9 @@ def upload(request):
             finally:
                 if default_storage.exists(path_rel):
                     default_storage.delete(path_rel)
+                allowed.remove(path_rel)
+        request.session["staged_paths"] = allowed
+        request.session.modified = True
         messages.success(request, f"{n_ok} file diproses, {n_err} gagal.")
         return redirect("upload")
     if request.method == "POST" and request.POST.get("action") == "analyze":
@@ -433,6 +448,14 @@ def upload(request):
                 dilewati += 1
                 continue
             preview.append(_analyze_file(f.name, f))
+        if preview:
+            # Daftarkan path staging ke sesi (akumulatif — analyze bisa
+            # dipanggil berkali-kali menambah file); commit menolak path lain.
+            request.session["staged_paths"] = (
+                request.session.get("staged_paths", [])
+                + [p["staged"] for p in preview]
+            )
+            request.session.modified = True
         if dilewati or diekstrak:
             messages.info(
                 request,
