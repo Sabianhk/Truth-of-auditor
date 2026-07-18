@@ -377,19 +377,26 @@ class _MoneyMatcher:
                                    score=score, reason_code=reason, reason_detail=detail))
 
         # --- pass 0: ticket-join gateway (seperti Panel↔Bracket) ---
+        # W1-7a: di antara duplikat ber-ticket sama, nominal PERSIS menang
+        # (fallback selisih terkecil) — urutan insert arbitrer, duplikat salah
+        # nominal tidak boleh mengalahkan kandidat yang persis.
         for p in left:
             if not p.ticket_no:
                 continue
-            for b in gw_ticket.get(p.ticket_no, []):
-                if b.id in used or (p.money_delta > 0) != (b.money_delta > 0):
-                    continue
-                diff = abs(int(abs(p.money_delta)) - int(abs(b.money_delta)))
-                if diff == 0:
-                    emit(p, b, MatchResult.Bucket.COCOK, 100, "ticket")
-                else:
-                    emit(p, b, MatchResult.Bucket.TINJAU, 90, "ticket_amount",
-                         f"ticket sama, selisih nominal {diff:,}")
-                break
+            cands = [
+                b for b in gw_ticket.get(p.ticket_no, [])
+                if b.id not in used and (p.money_delta > 0) == (b.money_delta > 0)
+            ]
+            if not cands:
+                continue
+            amt = int(abs(p.money_delta))
+            b = min(cands, key=lambda b_: abs(amt - int(abs(b_.money_delta))))
+            diff = abs(amt - int(abs(b.money_delta)))
+            if diff == 0:
+                emit(p, b, MatchResult.Bucket.COCOK, 100, "ticket")
+            else:
+                emit(p, b, MatchResult.Bucket.TINJAU, 90, "ticket_amount",
+                     f"ticket sama, selisih nominal {diff:,}")
         # --- pass 0b: reference-join gateway (kunci pasti non-ticket, mis. UUID QRIS) ---
         for p in left:
             if p.id in matched or not p.reference:
@@ -404,9 +411,14 @@ class _MoneyMatcher:
                     emit(p, b, MatchResult.Bucket.TINJAU, 90, "reference_amount",
                          f"reference sama, selisih nominal {diff:,}")
                 break
-        # Gateway ber-ticket/ber-reference yang TAK dikenal panel bukan kandidat fuzzy siapa pun.
+        # Gateway ber-ticket/ber-reference yang TAK dikenal panel bukan kandidat
+        # fuzzy siapa pun. W1-7b: duplikat sisa ber-ticket DIKENAL panel yang tak
+        # terpakai pass 0 juga diblokir — ticketnya sudah menunjuk baris panel
+        # tertentu, jangan sampai dipinang fuzzy baris panel lain (jadi kandidat
+        # no_panel biasa di B2).
         blocked = {
-            b.id for t, lst in gw_ticket.items() if t not in panel_tickets for b in lst
+            b.id for t, lst in gw_ticket.items()
+            for b in lst if t not in panel_tickets or b.id not in used
         } | {
             b.id for ref, lst in gw_ref.items() if ref not in panel_refs for b in lst
         }

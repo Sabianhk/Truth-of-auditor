@@ -4,7 +4,7 @@ Skenario di sini mereplikasi temuan audit trial OKE25 27–29 Juni:
 salah-sanding lintas-rekening, pencurian kandidat, ticket gateway, fee, H-1,
 uang lintas-hari terkunci, dan klasifikasi uang tak berpasangan A–D.
 """
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.test import TestCase
@@ -95,6 +95,55 @@ class Pass0TicketGatewayTests(_Base):
         r = MatchResult.objects.get(left=p)
         self.assertIsNone(r.right_id)
         self.assertEqual(r.reason_code, "no_money")
+
+
+class Pass0DupTicketTests(_Base):
+    """W1-7: duplikat ticket gateway — (a) kandidat nominal PERSIS menang
+    (urutan insert arbitrer, jangan biarkan duplikat salah nominal menang);
+    (b) sisa duplikat ber-ticket DIKENAL panel tidak boleh jatuh ke fuzzy —
+    identitasnya sudah menunjuk baris panel tertentu."""
+
+    def _dup(self):
+        p = self.tx(self.panel, self.up_panel, "depo", "50000", "50000",
+                    datetime(2026, 6, 27, 10), ticket="D555", user="eka", cp="EKA SARI")
+        g_wrong = self.tx(self.gw, self.up_qr, "depo", "49000", "49000",
+                          datetime(2026, 6, 27, 10, 1), ticket="D555", cp="QRIS")
+        g_exact = self.tx(self.gw, self.up_qr, "depo", "50000", "50000",
+                          datetime(2026, 6, 27, 10, 2), ticket="D555", cp="QRIS")
+        return p, g_wrong, g_exact
+
+    def test_dup_ticket_pilih_nominal_persis(self):
+        p, g_wrong, g_exact = self._dup()
+        self.match()
+        r = MatchResult.objects.get(left=p)
+        self.assertEqual(r.right_id, g_exact.id)  # bukan g_wrong (urutan insert)
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.reason_code, "ticket")
+
+    def test_dup_ticket_sisa_jadi_no_panel_biasa(self):
+        p, g_wrong, g_exact = self._dup()
+        run_batch(self.toko, self.tol, recon_date=date(2026, 6, 27))
+        r = MatchResult.objects.get(left=p)
+        self.assertEqual(r.right_id, g_exact.id)
+        r_sisa = MatchResult.objects.get(right=g_wrong)
+        self.assertIsNone(r_sisa.left)
+        self.assertEqual(r_sisa.reason_code, "no_panel")
+
+    def test_dup_ticket_sisa_tak_boleh_fuzzy_panel_lain(self):
+        p1 = self.tx(self.panel, self.up_panel, "depo", "50000", "50000",
+                     datetime(2026, 6, 27, 10), ticket="D666", user="febi", cp="FEBI A")
+        p2 = self.tx(self.panel, self.up_panel, "depo", "49000", "49000",
+                     datetime(2026, 6, 27, 11), user="gani", cp="GANI B")
+        g_exact = self.tx(self.gw, self.up_qr, "depo", "50000", "50000",
+                          datetime(2026, 6, 27, 10, 1), ticket="D666", cp="QRIS")
+        self.tx(self.gw, self.up_qr, "depo", "49000", "49000",
+                datetime(2026, 6, 27, 10, 2), ticket="D666", user="gani", cp="QRIS")
+        self.match()
+        r1 = MatchResult.objects.get(left=p1)
+        self.assertEqual(r1.right_id, g_exact.id)
+        r2 = MatchResult.objects.get(left=p2)
+        self.assertIsNone(r2.right_id)  # duplikat sisa D666 bukan kandidat fuzzy
+        self.assertEqual(r2.reason_code, "no_money")
 
 
 class Pass1GlobalAssignTests(_Base):
