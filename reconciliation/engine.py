@@ -1119,6 +1119,7 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         #     hasil no_money-nya sudah tertulis di batch asal, jadi run berikutnya
         #     memperlakukannya sebagai carried biasa).
         retro_waiting = set()
+        retro_orphans = {}  # home_pk -> (home, [uang susulan tanpa pasangan])
         if retro:
             retro_matched_money = {
                 r.left_id for r in retro_results
@@ -1133,9 +1134,39 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
                 ):
                     retro_waiting.add(t.id)
                 else:
-                    by_home.setdefault(retro[t.id].pk, []).append(t.id)
+                    home = retro[t.id]
+                    by_home.setdefault(home.pk, []).append(t.id)
+                    # W1-5: uang susulan TAK berpasangan — dikonsumsi ke home
+                    # tapi dulu tanpa MatchResult → hilang dari antrean tinjau.
+                    if (t.source_type.key in MONEY_SOURCES and t.jenis != "admin"
+                            and t.id not in used_rights):
+                        retro_orphans.setdefault(home.pk, (home, []))[1].append(t)
         for home_id, ids in by_home.items():
             Transaction.objects.filter(id__in=ids).update(consumed_by_batch_id=home_id)
+        # W1-5 — hasil no_panel utk uang susulan tanpa pasangan, di run PANEL_BANK
+        # batch HOME (pola no_panel B2). Home tanpa run PANEL_BANK: tak ada tempat
+        # menaruh hasil → dicatat di summary home sebagai retro_unmatched.
+        for home, rows in retro_orphans.values():
+            pb_home = MatchRun.objects.filter(
+                batch=home, relation=MatchRun.Relation.PANEL_BANK
+            ).order_by("id").first()
+            if pb_home is None:
+                home.refresh_from_db(fields=["summary"])
+                s_home = dict(home.summary or {})
+                s_home["retro_unmatched"] = s_home.get("retro_unmatched", 0) + len(rows)
+                home.summary = s_home
+                home.save(update_fields=["summary"])
+                continue
+            MatchResult.objects.bulk_create([
+                MatchResult(
+                    run=pb_home, bucket=MatchResult.Bucket.TINJAU, left=None, right=t,
+                    score=0, reason_code="no_panel",
+                    reason_detail=(
+                        f"Uang susulan tanpa catatan panel (via run {recon_date})"
+                    ),
+                ) for t in rows
+            ], batch_size=2000)
+            refresh_batch_summary(home)
         summary["late_settlement"]["expired"] = expired
         # 3) Yang masih menunggu settlement tetap AKTIF: carried dalam window yang
         #    belum settle + no_money BARU batch ini yang dalam window + panel

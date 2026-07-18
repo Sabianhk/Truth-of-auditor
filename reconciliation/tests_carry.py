@@ -464,6 +464,44 @@ class RetroSusulanTests(_Base):
         b27.refresh_from_db()
         self.assertEqual(b27.summary["dp"]["selisih"], 0.0)
 
+    def test_uang_susulan_tanpa_pasangan_dapat_hasil_no_panel_di_home(self):
+        # W1-5: uang susulan TAK berpasangan dikonsumsi ke batch asal — dulu
+        # tanpa MatchResult (hilang dari antrean tinjau & summary unmatched home).
+        b27 = self._batch27_selesai()
+        k3 = self._tx(self.bank, "depo", "90000", "90000", "", "k3",
+                      username="rudi", dt=datetime(2026, 6, 27, 23, 30))
+        run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 28))
+        k3.refresh_from_db()
+        self.assertEqual(k3.consumed_by_batch, b27)
+        r = MatchResult.objects.get(right=k3)
+        self.assertEqual(r.run.batch, b27)               # hasil di run PANEL_BANK home
+        self.assertEqual(r.run.relation, "panel_bank")
+        self.assertEqual(r.bucket, MatchResult.Bucket.TINJAU)
+        self.assertEqual(r.reason_code, "no_panel")
+        self.assertIsNone(r.left)
+        self.assertIn("susulan", r.reason_detail.lower())
+        b27.refresh_from_db()                            # summary home ter-refresh
+        self.assertEqual(b27.summary["buckets"]["perlu_tinjau"], 1)
+
+    def test_uang_susulan_home_tanpa_run_panel_bank_dicatat_di_summary(self):
+        # Home yang tak punya run PANEL_BANK (mis. batch PANEL_BRACKET saja):
+        # tak ada tempat menaruh hasil → catat retro_unmatched di summary home.
+        self._tx(self.panel, "depo", "50000", "50000", "D1", "p1", username="budi")
+        self._tx(self.bracket, "depo", "50000", "50000", "D1", "br1", username="budi")
+        include = {"panel_dp": True, "panel_wd": True, "bracket": True,
+                   "bank": False, "gateway": False}
+        b27 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 27),
+                        include=include)
+        self.assertFalse(b27.runs.filter(relation="panel_bank").exists())
+        k3 = self._tx(self.bank, "depo", "90000", "90000", "", "k3",
+                      username="rudi", dt=datetime(2026, 6, 27, 23, 30))
+        run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 28))
+        k3.refresh_from_db()
+        self.assertEqual(k3.consumed_by_batch, b27)
+        self.assertFalse(MatchResult.objects.filter(right=k3).exists())
+        b27.refresh_from_db()
+        self.assertEqual(b27.summary.get("retro_unmatched"), 1)
+
     def test_susulan_tanpa_batch_asal_tetap_di_batch_berjalan(self):
         self._batch27_selesai()
         # Baris tanggal 26 — tidak pernah ada batch 26 → perlakuan biasa.
