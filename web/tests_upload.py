@@ -93,6 +93,25 @@ class UploadCommitTests(TestCase):
         self.assertEqual(Upload.objects.count(), n_up)  # tidak ada upload dibuat
         self.assertEqual(Transaction.objects.count(), n_tx)
 
+    def test_commit_array_desync_ditolak_seluruhnya(self):
+        """W3-6c: parallel array beda panjang (form korup) → tolak seluruh
+        commit dengan pesan, jangan zip() memotong senyap."""
+        staged = default_storage.save("staging/x.csv", ContentFile(b"dummy"))
+        self._stage_in_session(staged)
+        try:
+            n_up = Upload.objects.count()
+            with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False):
+                r = self.client.post(reverse("upload"), {
+                    "action": "commit", "staged": [staged],
+                    "flow": [""], "provider": "Nexus",   # parser_key hilang
+                }, follow=True)
+            self.assertEqual(Upload.objects.count(), n_up)
+            self.assertTrue(default_storage.exists(staged))
+            self.assertContains(r, "tidak sinkron")
+        finally:
+            if default_storage.exists(staged):
+                default_storage.delete(staged)
+
     def test_commit_menolak_path_tanpa_analyze_di_sesi(self):
         """W3-1: path staging yang tak pernah dianalisa di sesi ini ditolak —
         file TIDAK terhapus (cegah user menghapus/commit staging user lain)."""

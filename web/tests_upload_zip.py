@@ -5,6 +5,7 @@ input folder (webkitdirectory) tersedia di form.
 """
 import io
 import zipfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -70,6 +71,35 @@ class ZipUploadTests(_Base):
         self.assertEqual(r.context["preview"], [])
         self.assertContains(r, "rusak.zip")
 
+    def test_zip_member_rusak_pesan_jelas_bukan_500(self):
+        """W3-6b: CRC member korup → BadZipFile saat zf.read dulu meledak 500;
+        kini pesan "zip rusak"."""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("rusak.csv", BRI_HEADER)
+        raw = bytearray(buf.getvalue())
+        # byte pertama isi member: header lokal 30 byte + panjang nama file
+        raw[30 + len("rusak.csv")] ^= 0xFF
+        f = SimpleUploadedFile("arsip.zip", bytes(raw), content_type="application/zip")
+        r = self._analyze([f])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["preview"], [])
+        self.assertContains(r, "zip rusak")
+
+    def test_zip_member_kebesaran_dilewati_dan_dilaporkan(self):
+        """W3-6d: cap per-member 50MB konsisten dgn cap file langsung."""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("besar.csv", BRI_HEADER * 1000)   # 44.000 byte
+            zf.writestr("kecil.csv", BRI_HEADER)
+        f = SimpleUploadedFile("arsip.zip", buf.getvalue(), content_type="application/zip")
+        with patch("web.views._FILE_MAX_BYTES", 2000):
+            r = self._analyze([f])
+        preview = r.context["preview"]
+        self.assertEqual([p["name"] for p in preview], ["kecil.csv"])
+        self.assertContains(r, "besar.csv")
+        self.assertContains(r, "melebihi")
+
     def test_xlsx_tidak_dianggap_zip(self):
         # xlsx = arsip zip juga (magic PK) — keputusan pakai EKSTENSI: .xlsx tetap
         # satu baris preview, tidak diekstrak.
@@ -90,6 +120,15 @@ class ZipUploadTests(_Base):
         r = self._analyze(files)
         preview = r.context["preview"]
         self.assertEqual([p["name"] for p in preview], ["bri.csv"])
+
+
+class UploadSettingsTests(TestCase):
+    def test_cap_jumlah_file_per_request(self):
+        """W3-6e: folder picker bisa >100 file — default Django (100) membuat
+        request 400 sebelum view jalan."""
+        from django.conf import settings
+
+        self.assertEqual(settings.DATA_UPLOAD_MAX_NUMBER_FILES, 250)
 
 
 class FolderInputTests(_Base):

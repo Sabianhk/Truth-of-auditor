@@ -123,3 +123,12 @@ class MonthlyViewTests(_Data):
         r = self.client.get(reverse("monthly_overview"))
         self.assertEqual(r.status_code, 200)
         self.assertIn("Belum ada rekonsiliasi", r.content.decode())
+
+    def test_bulan_di_luar_rentang_fallback(self):
+        """W3-6a: ?month=2026-13 dulu ValueError 500 (date(year, 13, 1)) —
+        kini fallback ke bulan valid terakhir."""
+        self.batch(date(2026, 6, 27), _summary(100, 90, 0, 0, 50, 0, 0))
+        for buruk in ("2026-13", "2026-00", "0000-01"):
+            r = self.client.get(reverse("monthly_overview"), {"month": buruk})
+            self.assertEqual(r.status_code, 200, buruk)
+            self.assertIn("27 Jun", r.content.decode(), buruk)

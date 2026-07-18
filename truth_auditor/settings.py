@@ -188,6 +188,11 @@ CSRF_FAILURE_VIEW = 'web.views.csrf_failure'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Folder picker upload bisa mengirim ratusan file sekali analyze — default
+# Django (100) membuat request 400 SEBELUM view jalan. Cap ukuran tetap
+# dijaga _FILE_MAX_BYTES / _REQ_MAX_BYTES di web/views.py.
+DATA_UPLOAD_MAX_NUMBER_FILES = 250
+
 # --- Produksi / Railway ---
 CSRF_TRUSTED_ORIGINS = []
 if _railway_host:

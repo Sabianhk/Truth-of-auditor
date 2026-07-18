@@ -267,30 +267,39 @@ def _is_junk_name(name):
 
 
 def _extract_zip(f):
-    """Ekstrak arsip zip upload → (list[(nama, bytes)], n_dilewati, error|None).
-    Guard: jumlah file & total ukuran terkompresi-buka (anti zip-bomb); zip
-    berpassword/rusak → error berpesan jelas. xlsx TIDAK lewat sini (dicek
-    berdasarkan ekstensi .zip, bukan magic PK — xlsx juga arsip zip)."""
+    """Ekstrak arsip zip upload → (list[(nama, bytes)], n_dilewati,
+    list nama member >50MB, error|None). Guard: jumlah file & total ukuran
+    terkompresi-buka (anti zip-bomb), cap per-member `_FILE_MAX_BYTES`
+    (konsisten cap file langsung); zip berpassword/rusak → error berpesan
+    jelas, bukan 500. xlsx TIDAK lewat sini (dicek berdasarkan ekstensi
+    .zip, bukan magic PK — xlsx juga arsip zip)."""
     try:
         zf = zipfile.ZipFile(f)
     except zipfile.BadZipFile:
-        return [], 0, "bukan file zip yang valid"
+        return [], 0, [], "bukan file zip yang valid"
     infos = [i for i in zf.infolist() if not i.is_dir()]
     if len(infos) > _ZIP_MAX_FILES:
-        return [], 0, f"terlalu banyak file di dalam zip (>{_ZIP_MAX_FILES})"
+        return [], 0, [], f"terlalu banyak file di dalam zip (>{_ZIP_MAX_FILES})"
     if sum(i.file_size for i in infos) > _ZIP_MAX_BYTES:
-        return [], 0, "isi zip terlalu besar (>200MB)"
-    out, dilewati = [], 0
+        return [], 0, [], "isi zip terlalu besar (>200MB)"
+    out, dilewati, kebesaran = [], 0, []
     for i in infos:
         if _is_junk_name(i.filename):
+            dilewati += 1
+            continue
+        if i.file_size > _FILE_MAX_BYTES:
+            kebesaran.append(os.path.basename(i.filename.replace("\\", "/")))
             dilewati += 1
             continue
         try:
             data = zf.read(i)
         except RuntimeError:
-            return [], 0, "zip berpassword tidak didukung — ekstrak dulu lalu upload isinya"
+            return [], 0, [], "zip berpassword tidak didukung — ekstrak dulu lalu upload isinya"
+        except (zipfile.BadZipFile, OSError):
+            # CRC/isi member korup — jangan meledak 500 ke user.
+            return [], 0, [], "zip rusak — sebagian isinya tidak bisa dibaca; ekstrak ulang lalu upload isinya"
         out.append((os.path.basename(i.filename.replace("\\", "/")), data))
-    return out, dilewati, None
+    return out, dilewati, kebesaran, None
 
 
 # File staging lebih tua dari ini = yatim (analyze tanpa commit) → disapu.
@@ -385,6 +394,15 @@ def upload(request):
         flows = request.POST.getlist("flow")
         passwords = request.POST.getlist("password")
         provider = request.POST.get("provider", "")
+        # Parallel array wajib sejajar (password boleh lebih pendek) — form
+        # korup/desync ditolak seluruhnya, jangan zip() memotong senyap.
+        if not (len(staged) == len(keys) == len(flows)):
+            messages.error(
+                request,
+                "Form commit tidak sinkron (jumlah kolom tidak sama) — "
+                "muat ulang halaman lalu ulangi analisa.",
+            )
+            return redirect("upload")
         # Staging terikat sesi: commit hanya menerima path yang dianalisa di
         # sesi INI (daftar diisi saat analyze). Tanpa ini, siapa pun yang login
         # bisa commit + menghapus file staging user lain (nama file bank mudah
@@ -436,10 +454,12 @@ def upload(request):
                 dilewati += 1
                 continue
             if f.name.lower().endswith(".zip"):
-                isi, n_lewat, err = _extract_zip(f)
+                isi, n_lewat, kebesaran, err = _extract_zip(f)
                 if err:
                     messages.error(request, f"{f.name}: {err}")
                     continue
+                for nama in kebesaran:
+                    messages.error(request, f"{nama}: melebihi 50MB per file, dilewati.")
                 dilewati += n_lewat
                 for nama, data in isi:
                     preview.append(_analyze_file(nama, ContentFile(data)))
@@ -1545,6 +1565,11 @@ def monthly_overview(request):
             year, month = int(sel[:4]), int(sel[5:7])
         except ValueError:
             year = month = None
+        else:
+            # ?month=2026-13 dulu ValueError 500 di date(year, 13, 1) —
+            # di luar rentang valid → fallback bulan terakhir yang valid.
+            if not (1 <= month <= 12 and 1 <= year <= 9999):
+                year = month = None
     if year is None:
         ref = latest or date_cls.today()
         year, month = ref.year, ref.month
