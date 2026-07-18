@@ -115,7 +115,8 @@ class BCAPDFParser(BaseParser):
                 cur["cont"].append(s)
 
         out = []
-        for idx, t in enumerate(txns):
+        occ_counter = {}  # (tanggal, nominal, CR/DB, desc[:40]) -> kemunculan sejauh ini
+        for t in txns:
             am = AMT_RE.search(t["rest"])
             if not am:
                 continue
@@ -143,8 +144,15 @@ class BCAPDFParser(BaseParser):
                 "description": desc,
                 "raw": {"date": t["date"], "line": t["rest"], "cont": " ".join(t["cont"])},
             }
+            # Kemunculan ke-N dari kunci stabil (tanggal, nominal, CR/DB, desc),
+            # dihitung urut dalam FILE INI — bukan posisi baris global (idx),
+            # yang bergeser antar export tumpang-tindih (1-15 vs 1-31) dan
+            # membuat transaksi lama masuk dobel. Pola sama dgn bni_pdf.
+            key = (t["date"], str(amount), am.group(2), desc[:40])
+            occ = occ_counter.get(key, 0)
+            occ_counter[key] = occ + 1
             row["row_hash"] = row_hash(
-                "bca_pdf", [t["date"], amount, am.group(2), desc[:40], idx]
+                "bca_pdf", [t["date"], amount, am.group(2), desc[:40], occ]
             )
             out.append(row)
         return _merge_switching(out)
