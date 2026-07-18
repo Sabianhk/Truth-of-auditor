@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
+from django.db import transaction as db_transaction
 from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, Max, Min, OuterRef, Q, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1741,26 +1742,33 @@ def bulk_review(request, pk):
     ids = [i for i in request.POST.getlist("result_ids") if i.isdigit()]
     rows = list(MatchResult.objects.filter(run=run, id__in=ids))
     updated, skipped = [], 0
+    consume_left_ids = []
     for r in rows:
         # Guard W1-6a: cocok tanpa baris uang pasangan = akuntansi bohong.
         if action == "mark_matched" and r.right_id is None:
             skipped += 1
             continue
-        was_no_money = r.reason_code == "no_money"
+        # Guard W1-6b: override no_money mengeluarkan baris dari carry-over —
+        # left AKTIF dikonsumsi ke batch asal (filter isnull di query massal
+        # bawah menjaga per-baris: yang sudah terkonsumsi tak disentuh).
+        if r.reason_code == "no_money" and r.left_id and run.batch_id:
+            consume_left_ids.append(r.left_id)
         r.bucket = buckets[action]
         r.reason_code = "manual_override"
-        r.save(update_fields=["bucket", "reason_code"])
-        # Guard W1-6b: override no_money mengeluarkan baris dari carry-over —
-        # konsumsi left aktif ke batch asal agar tidak di-match ganda nanti.
-        if was_no_money and r.left_id and run.batch_id:
-            Transaction.objects.filter(
-                pk=r.left_id, consumed_by_batch__isnull=True
-            ).update(consumed_by_batch=run.batch)
-        ReviewAction.objects.create(
-            result=r, action=action, reason="bulk", reviewer=request.user
-        )
         updated.append(r)
     if updated:
+        # W4-9: tulis massal dalam satu transaksi — dulu save()+create() per
+        # baris (80 write utk 40 baris). ReviewAction per baris tetap tercatat.
+        with db_transaction.atomic():
+            MatchResult.objects.bulk_update(updated, ["bucket", "reason_code"])
+            if consume_left_ids:
+                Transaction.objects.filter(
+                    pk__in=consume_left_ids, consumed_by_batch__isnull=True
+                ).update(consumed_by_batch=run.batch)
+            ReviewAction.objects.bulk_create([
+                ReviewAction(result=r, action=action, reason="bulk", reviewer=request.user)
+                for r in updated
+            ])
         catat(request.user, "review_massal", f"{len(updated)} hasil",
               toko=run.batch.toko if run.batch else None,
               run_pk=run.pk, n=len(updated), action=action)
