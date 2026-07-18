@@ -46,6 +46,9 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
 _railway_host = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if _railway_host:
     ALLOWED_HOSTS.append(_railway_host)
+    # Healthcheck Railway memakai Host ini — tanpa entri ini deploy selalu
+    # dianggap gagal (400 DisallowedHost) dan tidak pernah menerima traffic.
+    ALLOWED_HOSTS.append('healthcheck.railway.app')
 ALLOWED_HOSTS += [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
@@ -216,6 +219,9 @@ LOGGING = {
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+    # Healthcheck internal Railway datang tanpa X-Forwarded-Proto — jangan
+    # di-redirect ke https (301 = healthcheck gagal, deploy tak pernah sehat).
+    SECURE_REDIRECT_EXEMPT = [r'^healthz$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
