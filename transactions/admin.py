@@ -1,10 +1,14 @@
 from django.contrib import admin
 
+from reconciliation.admin import NoDeleteAdmin
+
 from .models import Transaction
 
 
 @admin.register(Transaction)
-class TransactionAdmin(admin.ModelAdmin):
+class TransactionAdmin(NoDeleteAdmin):
+    # Hapus hanya lewat UI aplikasi (hapus upload/batch dgn guard integritas);
+    # delete admin membypass guard + M2M duplikat lintas upload.
     list_display = (
         "occurred_at", "source_type", "jenis", "amount",
         "username", "ticket_no", "reference", "is_duplicate",

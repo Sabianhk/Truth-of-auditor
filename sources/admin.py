@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from reconciliation.admin import NoDeleteAdmin
+
 from .models import Account, ColumnTemplate, SourceType, Toko, Upload
 
 
@@ -32,7 +34,9 @@ class ColumnTemplateAdmin(admin.ModelAdmin):
 
 
 @admin.register(Upload)
-class UploadAdmin(admin.ModelAdmin):
+class UploadAdmin(NoDeleteAdmin):
+    # Hapus hanya lewat UI aplikasi (guard _locking_batches + audit trail);
+    # delete admin membypass guard integritas → bukti rekonsiliasi lenyap.
     list_display = (
         "original_name", "source_type", "account", "flow", "recon_date",
         "status", "rows_parsed", "rows_duplicate", "created_at",
