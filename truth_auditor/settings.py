@@ -225,6 +225,9 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # jam; lockout lepas sendiri
 AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]  # kunci kombo user+IP
+# W6-8a: halaman lockout bahasa Indonesia (standalone ala 404/500) — bukan
+# respons default axes berbahasa Inggris. Tetap HTTP 429.
+AXES_LOCKOUT_TEMPLATE = 'web/lockout.html'
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = '/'

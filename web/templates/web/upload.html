@@ -239,7 +239,9 @@
     {% for u in uploads %}
       <tr>
         {% if is_admin_user %}<td>{% if not u.locked %}<input type="checkbox" class="rowchk" name="upload_ids" value="{{ u.pk }}" aria-label="Pilih {{ u.original_name|default:u.pk }}">{% endif %}</td>{% endif %}
-        <td>{{ u.original_name|default:u.pk }}</td>
+        <td>{{ u.original_name|default:u.pk }}
+          {# W6-8c: file uang (bank/gateway) bisa dibuka isinya di Mutasi Bank — file lama di luar cap dropdown 60 tetap terjangkau lewat sini. #}
+          {% if u.source_type.key == 'bank' or u.source_type.key == 'gateway' %}<a class="faint" style="font-size:11.5px;white-space:nowrap" href="{% url 'bank_mutations' %}?upload={{ u.pk }}" title="Lihat isi file ini di halaman Mutasi Bank">lihat isi ›</a>{% endif %}</td>
         <td>{{ u.source_type.name }}</td>
         <td>{{ u.provider|default:"—" }}</td>
         <td>{{ u.flow|default:"—" }}</td>

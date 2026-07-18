@@ -866,14 +866,15 @@ def reconcile(request):
     bank = request.GET.get("bank", "")
     if bank not in ("bank", "gateway"):
         bank = ""  # nilai tak dikenal → perlakukan sebagai "semua sumber"
-    # Slice 20 langsung di DB (dulu memuat SEMUA batch toko utk diambil 20).
-    # Nomor = posisi asli di antara SEMUA batch toko via batch_no_map — tidak
-    # berubah saat filter sumber uang aktif. Filter completeness di DB (JSON
-    # boolean, nilai dari check_completeness selalu true/false).
+    # Paginator 20/halaman (?hal=) — dulu hard-stop 20 tanpa pager sehingga
+    # batch lama tak terjangkau dari UI (W6-8b). Nomor = posisi asli di antara
+    # SEMUA batch toko via batch_no_map — tidak berubah saat filter sumber uang
+    # aktif. Filter completeness di DB (JSON boolean dari check_completeness).
     qs_b = ReconBatch.objects.filter(toko=active)
     if bank:
         qs_b = qs_b.filter(**{f"completeness__{bank}": True})
-    batches = list(qs_b.order_by("-id")[:20])
+    page_b = Paginator(qs_b.order_by("-id"), 20).get_page(request.GET.get("hal"))
+    batches = list(page_b.object_list)
     nos = batch_no_map(active, [b.id for b in batches])
     for b in batches:
         b.no = nos.get(b.id)
@@ -890,6 +891,7 @@ def reconcile(request):
         "comp_pct": round(100 * comp_ready / len(comp_keys)),
         "tolerances": ToleranceProfile.objects.all(),
         "batches": batches,
+        "page_b": page_b,
         "bank": bank,
         "date_from": df or "", "date_to": dt or "",
         "panel_dates": panel_dates,

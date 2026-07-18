@@ -25,6 +25,17 @@ class BruteForceTests(TestCase):
         r = self.client.post(url, {"username": "adm", "password": "pw123456"})
         self.assertEqual(r.status_code, 429)
 
+    def test_halaman_lockout_bahasa_indonesia(self):
+        """W6-8a: halaman lockout pakai template Indonesia sendiri, bukan
+        respons default axes berbahasa Inggris."""
+        url = reverse("login")
+        for _ in range(5):
+            self.client.post(url, {"username": "adm", "password": "salah"})
+        r = self.client.post(url, {"username": "adm", "password": "pw123456"})
+        self.assertEqual(r.status_code, 429)
+        self.assertContains(r, "Terlalu banyak percobaan login", status_code=429)
+        self.assertContains(r, "1 jam", status_code=429)
+
     def test_di_bawah_limit_tetap_bisa_login(self):
         url = reverse("login")
         for _ in range(3):

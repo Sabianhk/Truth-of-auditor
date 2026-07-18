@@ -341,6 +341,22 @@ class UploadHistoryTests(TestCase):
         self.assertContains(r, "lbs-file.xlsx")
         self.assertNotContains(r, "slo-file.xlsx")
 
+    def test_link_lihat_isi_untuk_file_uang(self):
+        """W6-8c: file bank/gateway di Riwayat Upload dapat link 'lihat isi' →
+        /mutasi-bank/?upload=<id> (file lama di luar cap dropdown 60 tetap
+        terjangkau); file non-uang (panel/bracket) tidak."""
+        bank = SourceType.objects.get_or_create(key="bank", defaults={"name": "Bank"})[0]
+        up_bank = Upload.objects.create(
+            source_type=bank, toko=self.lbs, original_name="mutasi.csv"
+        )
+        up_br = Upload.objects.create(
+            source_type=self.bracket, toko=self.lbs, original_name="fr.xlsx"
+        )
+        self.client.post(reverse("set_toko"), {"toko_id": self.lbs.id})
+        r = self.client.get(reverse("upload"))
+        self.assertContains(r, f"{reverse('bank_mutations')}?upload={up_bank.pk}")
+        self.assertNotContains(r, f"{reverse('bank_mutations')}?upload={up_br.pk}")
+
 
 class UploadLockedAnnotationTests(TestCase):
     """Anotasi `locked` di _uploads_for: upload terkunci bila buktinya dipakai

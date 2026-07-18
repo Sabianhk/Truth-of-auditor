@@ -52,7 +52,20 @@ class ReconcileRiwayatSliceTests(_Base):
         self.assertEqual(len(r.context["batches"]), 20)
         self.assertContains(r, ">#25</a>")
         self.assertContains(r, ">#6</a>")
-        self.assertNotContains(r, ">#5</a>")  # di luar slice 20
+        self.assertNotContains(r, ">#5</a>")  # di luar halaman 1
+
+    def test_halaman_2_menjangkau_batch_lama(self):
+        """W6-8b: riwayat batch berpaginasi (?hal=, 20/halaman) — dulu hard-stop
+        20 tanpa pager sehingga batch lama tak terjangkau dari UI."""
+        for _ in range(25):
+            ReconBatch.objects.create(toko=self.lbs, tolerance=self.tol)
+        r1 = self.client.get(reverse("reconcile"))
+        self.assertContains(r1, "hal=2")  # pager tampil
+        r2 = self.client.get(reverse("reconcile"), {"hal": "2"})
+        self.assertEqual(len(r2.context["batches"]), 5)
+        self.assertContains(r2, ">#5</a>")
+        self.assertContains(r2, ">#1</a>")
+        self.assertNotContains(r2, ">#25</a>")
 
 
 class DashboardBoundedTests(_Base):

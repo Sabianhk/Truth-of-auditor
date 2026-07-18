@@ -179,6 +179,14 @@ details.adv .adv-body{padding:2px 14px 14px}
     </tbody>
   </table>
   </div>
+  {# W6-8b: pager sederhana ?hal= — batch lama tetap terjangkau dari UI #}
+  {% if page_b.has_other_pages %}
+  <nav class="pager" aria-label="Navigasi riwayat batch" style="padding:10px 16px">
+    {% if page_b.has_previous %}<a class="pg nav" rel="prev" aria-label="Halaman sebelumnya" href="?hal={{ page_b.previous_page_number }}{% if bank %}&amp;bank={{ bank }}{% endif %}{% if date_from %}&amp;date_from={{ date_from }}{% endif %}{% if date_to %}&amp;date_to={{ date_to }}{% endif %}">&lsaquo;</a>{% else %}<span class="pg nav disabled">&lsaquo;</span>{% endif %}
+    <span class="pg cur" aria-current="page">{{ page_b.number }} / {{ page_b.paginator.num_pages }}</span>
+    {% if page_b.has_next %}<a class="pg nav" rel="next" aria-label="Halaman berikutnya" href="?hal={{ page_b.next_page_number }}{% if bank %}&amp;bank={{ bank }}{% endif %}{% if date_from %}&amp;date_from={{ date_from }}{% endif %}{% if date_to %}&amp;date_to={{ date_to }}{% endif %}">&rsaquo;</a>{% else %}<span class="pg nav disabled">&rsaquo;</span>{% endif %}
+  </nav>
+  {% endif %}
   {% else %}
   <div class="empty">
     <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v16a2 2 0 0 0 2 2h12"/><path d="M18 8l-4-4 4-4"/><path d="M2 12h13a4 4 0 0 1 4 4v4"/></svg></span>
