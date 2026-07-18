@@ -905,14 +905,39 @@ def classify_unmatched_money(t, recon_date, window, panel_tickets, operator_name
 
 
 def _operator_names(toko):
-    """Nama pemilik rekening operator — diambil dari nama file upload bank toko."""
+    """Nama pemilik rekening operator — diambil dari nama file upload bank toko.
+    DEDUP + terurut: file harian bertahun-tahun memuat nama sama ratusan kali;
+    classify_unmatched_money mem-fuzz tiap nama per baris uang — duplikat =
+    kerja fuzz berulang tanpa menambah informasi (any-match tak berubah)."""
     from sources.models import Upload  # impor lokal: hindari siklus
 
-    return [
+    return sorted({
         _norm_owner(n)
         for n in Upload.objects.filter(toko=toko, source_type__key="bank")
         .values_list("original_name", flat=True)
-    ]
+    } - {""})
+
+
+# Margin histori set ticket panel utk kategori b: uang yang bisa berkategori b
+# selalu bertanggal >= recon_date - window (lebih tua = kategori a duluan), dan
+# ticket gateway menunjuk transaksi panel yang berdekatan waktunya. Ticket panel
+# lebih tua dari window+30 hari tak mungkin relevan; margin 30 hari ekstra
+# menoleransi file panel telat/susulan. Tanpa batas ini SEMUA ticket sejarah
+# toko dimuat per batch (auto-split 30 tanggal = 30× muat penuh).
+_TICKET_HISTORY_MARGIN = 30
+
+
+def recent_panel_tickets(toko, recon_date, window):
+    """Set ticket panel toko utk cek kategori b (classify_unmatched_money),
+    dibatasi occurred_at >= recon_date - (window + margin).
+    recon_date None (batch legacy) → tanpa batas, perilaku lama."""
+    qs = Transaction.objects.filter(
+        toko=toko, source_type__key="panel"
+    ).exclude(ticket_no="")
+    if recon_date:
+        lo = recon_date - timedelta(days=window + _TICKET_HISTORY_MARGIN)
+        qs = qs.filter(occurred_at__gte=_day_start(lo))
+    return set(qs.values_list("ticket_no", flat=True))
 
 
 def _bracket_overlap_warning(runs):
@@ -1250,10 +1275,7 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
             (r_ for r_ in runs if r_.relation == MatchRun.Relation.PANEL_BANK), None
         )
         if pb_run is not None:
-            panel_ticket_set = set(
-                Transaction.objects.filter(toko=toko, source_type__key="panel")
-                .exclude(ticket_no="").values_list("ticket_no", flat=True)
-            )
+            panel_ticket_set = recent_panel_tickets(toko, recon_date, window)
             ops = _operator_names(toko)
             stats = {k: {"n": 0, "dp": 0.0, "wd": 0.0} for k in "abcd"}
             new_results = []

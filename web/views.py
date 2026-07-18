@@ -913,7 +913,11 @@ def batch_uang(request, pk):
     halaman ini adalah ikhtisar + filter + export."""
     from django.db.models import Exists, OuterRef
 
-    from reconciliation.engine import _operator_names, classify_unmatched_money
+    from reconciliation.engine import (
+        _operator_names,
+        classify_unmatched_money,
+        recent_panel_tickets,
+    )
 
     batch = get_object_or_404(ReconBatch, pk=pk, toko__in=tokos_for(request.user))
     batch_no = _batch_no(batch)
@@ -934,10 +938,8 @@ def batch_uang(request, pk):
     recon_date = batch.recon_date
     window = batch.tolerance.date_window_days
     if recon_date:
-        panel_tickets = set(
-            Transaction.objects.filter(toko=batch.toko, source_type__key="panel")
-            .exclude(ticket_no="").values_list("ticket_no", flat=True)
-        )
+        # batas tanggal sama dengan engine (window + margin) — bukan semua sejarah
+        panel_tickets = recent_panel_tickets(batch.toko, recon_date, window)
         ops = _operator_names(batch.toko)
         for t in rows:
             t.kategori = classify_unmatched_money(t, recon_date, window, panel_tickets, ops)
