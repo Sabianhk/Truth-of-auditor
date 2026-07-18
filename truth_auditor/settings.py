@@ -11,7 +11,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,14 +38,18 @@ DEBUG = os.environ.get('DEBUG', _default_debug).lower() == 'true'
 # Produksi wajib SECRET_KEY dari env — kunci default di atas ter-commit di repo
 # (publik). Gagal cepat saat boot jauh lebih aman daripada diam-diam insecure.
 if not DEBUG and 'SECRET_KEY' not in os.environ:
-    from django.core.exceptions import ImproperlyConfigured
-
     raise ImproperlyConfigured(
         'DEBUG=False tanpa env SECRET_KEY — set SECRET_KEY di environment produksi '
         '(jangan memakai kunci default repo).'
     )
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
+# Host dev hanya saat DEBUG; testserver hanya saat suite tes — produksi
+# cukup domain Railway + env ALLOWED_HOSTS (jangan melayani Host sembarangan).
+ALLOWED_HOSTS = []
+if DEBUG:
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1', '0.0.0.0']
+if 'test' in sys.argv:
+    ALLOWED_HOSTS.append('testserver')
 _railway_host = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
 if _railway_host:
     ALLOWED_HOSTS.append(_railway_host)
@@ -119,9 +126,25 @@ DATABASES = {
 # Railway/produksi: pakai DATABASE_URL (Postgres) bila tersedia.
 _db_url = os.environ.get('DATABASE_URL')
 if _db_url:
+    # Kombinasi berbahaya: DEBUG=True menampilkan traceback + isi query ke
+    # browser siapa pun — jangan pernah menyala di atas database produksi.
+    # Escape hatch sadar (debugging darurat): env DEBUG_WITH_PROD_DB=1.
+    if DEBUG and os.environ.get('DEBUG_WITH_PROD_DB') != '1':
+        raise ImproperlyConfigured(
+            'DEBUG tidak boleh menyala di database produksi (DATABASE_URL ter-set). '
+            'Matikan DEBUG, atau set DEBUG_WITH_PROD_DB=1 bila benar-benar sadar risikonya.'
+        )
     import dj_database_url
 
     DATABASES['default'] = dj_database_url.parse(_db_url, conn_max_age=600)
+elif os.environ.get('RAILWAY_ENVIRONMENT'):
+    # Railway tanpa DATABASE_URL = fallback sqlite senyap di filesystem
+    # EPHEMERAL — seluruh data lenyap tiap redeploy. Mati keras jauh lebih
+    # aman daripada diam-diam kehilangan data auditor.
+    raise ImproperlyConfigured(
+        'Berjalan di Railway tanpa DATABASE_URL — sqlite di filesystem ephemeral '
+        'hilang tiap redeploy. Pasang Postgres dan set DATABASE_URL.'
+    )
 
 
 # Password validation
@@ -191,6 +214,11 @@ CSRF_FAILURE_VIEW = 'web.views.csrf_failure'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# --- Sesi: data finansial, jangan hidup 2 minggu (default Django) ---
+SESSION_COOKIE_AGE = 8 * 3600          # idle timeout 8 jam...
+SESSION_SAVE_EVERY_REQUEST = True      # ...digeser tiap request (rolling)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 # Folder picker upload bisa mengirim ratusan file sekali analyze — default
 # Django (100) membuat request 400 SEBELUM view jalan. Cap ukuran tetap
 # dijaga _FILE_MAX_BYTES / _REQ_MAX_BYTES di web/views.py.
@@ -213,6 +241,11 @@ LOGGING = {
     'root': {'handlers': ['console'], 'level': 'WARNING'},
     'loggers': {
         'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+        # Logger app (logger.exception/info di kode) harus benar-benar tampil
+        # di log produksi — root WARNING menelan INFO tanpa entri eksplisit ini.
+        'reconciliation': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'web': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'sources': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
 
@@ -224,6 +257,10 @@ if not DEBUG:
     SECURE_REDIRECT_EXEMPT = [r'^healthz$']
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+    # HSTS default MENYALA di produksi (1 tahun); bisa dimatikan/diubah via env.
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+        SECURE_HSTS_SECONDS > 0
+        and os.environ.get('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'True').lower() == 'true'
+    )
     SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
