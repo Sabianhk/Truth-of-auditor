@@ -34,6 +34,26 @@ class ParseDecimalTests(SimpleTestCase):
     def test_empty(self):
         self.assertEqual(parse_decimal(""), Decimal("0"))
 
+    # --- Heuristik format ID di mode intl (audit W2-5): "50.000" dulu jadi
+    # Decimal(50) (salah 1000x) dan "1.234.567" jadi 0 senyap (InvalidOperation).
+    def test_intl_pola_id_ribuan_tunggal(self):
+        self.assertEqual(parse_decimal("50.000"), Decimal("50000"))
+
+    def test_intl_pola_id_ribuan_ganda(self):
+        self.assertEqual(parse_decimal("1.234.567"), Decimal("1234567"))
+
+    def test_intl_pola_id_dengan_desimal_koma(self):
+        self.assertEqual(parse_decimal("1.234.567,89"), Decimal("1234567.89"))
+
+    def test_intl_desimal_biasa_tetap_intl(self):
+        self.assertEqual(parse_decimal("50.5"), Decimal("50.5"))
+
+    def test_intl_ribuan_koma_tetap_intl(self):
+        self.assertEqual(parse_decimal("1,234.56"), Decimal("1234.56"))
+
+    def test_intl_pola_id_negatif(self):
+        self.assertEqual(parse_decimal("-50.000"), Decimal("-50000"))
+
 
 class ExtractTests(SimpleTestCase):
     def test_ticket_deposit(self):

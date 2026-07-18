@@ -162,6 +162,11 @@ def parse_decimal(value, number_format="intl"):
     neg = s.startswith("-") or s.endswith("DB") or s.endswith("Db")
     s = s.replace("DB", "").replace("Db", "").replace("CR", "").replace("Cr", "")
     s = s.strip().lstrip("+-").strip()
+    # Heuristik format ID di mode intl: "50.000"/"1.234.567(,89)" = titik ribuan
+    # Indonesia — di intl dulu terbaca Decimal(50) (salah 1000x) atau 0 senyap
+    # (InvalidOperation). Pola lain (mis. "50.5", "1,234.56") tetap intl.
+    if number_format != "id" and re.fullmatch(r"\d{1,3}(\.\d{3})+(,\d+)?", s):
+        number_format = "id"
     if number_format == "id":  # 1.000,00 -> 1000.00
         s = s.replace(".", "").replace(",", ".")
     else:  # intl 1,000.00 -> 1000.00
