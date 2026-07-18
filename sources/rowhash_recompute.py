@@ -22,7 +22,11 @@ Batasan yang disadari (didokumentasikan, bukan bug):
 - bca_pdf: baris fee SWITCHING yang di-merge parser tak tersimpan sebagai baris
   sendiri, jadi occurrence baris fee kembar yang selamat bisa bergeser; dan
   baris yang di-skip dedup saat ingest tak ikut dihitung occurrence upload ini.
-  Kasus sempit; tabrakan hash ditangani guard collision (skip, jangan ubah).
+  Kasus sempit. CATATAN JUJUR: guard collision hanya menahan pergeseran yang
+  MENABRAK hash hidup; pergeseran ke hash kosong tetap ditulis dan bisa berbeda
+  dari occurrence yang akan dihitung parser pada re-upload file yang sama —
+  baris kembar-SWITCHING itu bisa terduplikat sekali. Risiko residual diterima
+  (jauh lebih kecil dari bug idx-global yang digantikan).
 """
 from collections import Counter, defaultdict
 

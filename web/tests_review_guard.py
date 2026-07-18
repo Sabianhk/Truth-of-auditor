@@ -310,3 +310,32 @@ class PredikatBerpasanganTests(_Base):
         self.assertEqual(len(per_bank), 1)
         self.assertEqual(per_bank[0]["unpaired"], 1)
         self.assertEqual(per_bank[0]["paired"], 0)
+
+
+class KunciReviewOfSelfTests(_Base):
+    """W7-0: queryset locking review harus terkompilasi dgn of=("self",) —
+    select_related run/batch/right adalah LEFT OUTER JOIN (FK nullable) dan
+    Postgres menolak FOR UPDATE pada sisi nullable outer join
+    (NotSupportedError → 500). Introspeksi query.select_for_update_of saja,
+    tidak memaksa Postgres."""
+
+    def test_select_for_update_review_pakai_of_self(self):
+        from unittest.mock import patch
+
+        from django.db.models import QuerySet
+
+        r = self._pair(self._panel(), self._bank())
+        terlihat = []
+        asli = QuerySet.select_for_update
+
+        def mata(qs_self, *args, **kwargs):
+            qs = asli(qs_self, *args, **kwargs)
+            terlihat.append((qs.model, tuple(qs.query.select_for_update_of)))
+            return qs
+
+        with patch.object(QuerySet, "select_for_update", mata):
+            resp = self.client.post(
+                reverse("review", args=[r.pk]), {"action": "mark_review"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn((MatchResult, ("self",)), terlihat)

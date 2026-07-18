@@ -497,7 +497,14 @@ def upload(request):
                 if default_storage.exists(path_rel):
                     default_storage.delete(path_rel)
                 allowed.pop(path_rel, None)
-        request.session["staged_paths"] = allowed
+        # W6-4b (sisi commit): merge dgn store TERKINI — tab lain bisa saja
+        # analyze selagi commit ini jalan; tulis-balik salinan awal request
+        # akan menghapus entri mereka. Buang hanya path yang request ini proses.
+        consumed = set(_staged_map(request.session.get("staged_paths")).keys()) - set(allowed)
+        fresh = _staged_map(_fresh_session_staged(request))
+        merged = {p: t for p, t in fresh.items() if p not in consumed}
+        merged.update(allowed)
+        request.session["staged_paths"] = merged
         request.session.modified = True
         messages.success(request, f"{n_ok} file diproses, {n_err} gagal.")
         return redirect("upload")
@@ -1866,8 +1873,11 @@ def review(request, pk):
     with db_transaction.atomic():
         if r.run.batch_id:
             Toko.objects.select_for_update().get(pk=r.run.batch.toko_id)
+        # of=("self",): kunci HANYA baris MatchResult — select_related run/batch/
+        # right adalah LEFT OUTER JOIN (FK nullable) dan Postgres menolak
+        # FOR UPDATE pada sisi nullable outer join (NotSupportedError → 500).
         r = (
-            MatchResult.objects.select_for_update()
+            MatchResult.objects.select_for_update(of=("self",))
             .select_related("run", "run__batch", "right")
             .get(pk=r.pk)
         )
