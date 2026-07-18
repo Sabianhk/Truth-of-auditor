@@ -36,7 +36,7 @@ from core.models import AuditLog
 from reconciliation.models import MatchResult, MatchRun, ReconBatch, ReviewAction, ToleranceProfile
 from sources.detect import detect_source
 from sources.management.commands.ingest import detect_flow
-from sources.models import SourceType, Upload
+from sources.models import SourceType, Toko, Upload
 from sources.services import PARSERS, ingest, is_encrypted_xlsx
 from transactions.models import Transaction, specific_source_label
 from web.access import is_admin, tokos_for
@@ -315,6 +315,33 @@ def _extract_zip(f):
 
 # File staging lebih tua dari ini = yatim (analyze tanpa commit) → disapu.
 _STAGING_TTL = 24 * 3600
+# Cap entri staged_paths di sesi (W6-4c) — analyze maraton tanpa commit tidak
+# menggelembungkan sesi; entri tertua dibuang (file-nya toh disapu _sweep_staging).
+_STAGED_SESSION_CAP = 300
+
+
+def _staged_map(value):
+    """Normalisasi `staged_paths` sesi → dict {path: toko_id|None} (W6-4).
+    Format baru = dict path→toko saat analyze; format LAMA (list, sesi yang
+    hidup melewati deploy) diterima sebagai valid TANPA toko (None = tak
+    di-enforce — umur sesi pendek, commit stale sudah tertangani guard lain)."""
+    if isinstance(value, dict):
+        return dict(value)
+    return {p: None for p in (value or [])}
+
+
+def _fresh_session_staged(request):
+    """Nilai `staged_paths` TERKINI dari session store — bukan salinan yang
+    dimuat di awal request (W6-4b). Dua tab analyze konkuren: tanpa ini tab
+    kedua menimpa penuh daftar tab pertama (last-write-wins); dengan baca-ulang
+    sebelum menulis, jendela tabrakan tinggal selebar analyze→simpan."""
+    key = request.session.session_key
+    if not key:
+        return None
+    try:
+        return type(request.session)(session_key=key).get("staged_paths")
+    except Exception:  # noqa: BLE001 — store bermasalah: pakai salinan request
+        return None
 
 
 def _sweep_staging():
@@ -418,7 +445,7 @@ def upload(request):
         # sesi INI (daftar diisi saat analyze). Tanpa ini, siapa pun yang login
         # bisa commit + menghapus file staging user lain (nama file bank mudah
         # ditebak; suffix acak Django hanya muncul saat tabrakan nama).
-        allowed = list(request.session.get("staged_paths", []))
+        allowed = _staged_map(request.session.get("staged_paths"))
         n_ok = n_err = 0
         for i, (path_rel, key, flow) in enumerate(zip(staged, keys, flows)):
             if not path_rel.startswith("staging/") or ".." in path_rel:
@@ -428,6 +455,23 @@ def upload(request):
                 messages.error(
                     request,
                     f"{path_rel}: bukan hasil analisa sesi ini — ditolak, ulangi analisa.",
+                )
+                n_err += 1
+                continue
+            # W6-4a: path terikat toko yang aktif SAAT ANALYZE — commit dengan
+            # toko aktif berbeda (multi-tab / ganti toko di tengah) ditolak;
+            # file & entri sesi dibiarkan supaya bisa commit setelah kembali ke
+            # toko asal atau analisa ulang. None = format sesi lama (tanpa toko).
+            path_toko = allowed[path_rel]
+            if path_toko is not None and path_toko != active.pk:
+                nama = (
+                    Toko.objects.filter(pk=path_toko)
+                    .values_list("name", flat=True).first() or f"#{path_toko}"
+                )
+                messages.error(
+                    request,
+                    f"{os.path.basename(path_rel)}: dianalisa untuk toko {nama} — "
+                    f"ganti toko atau analisa ulang.",
                 )
                 n_err += 1
                 continue
@@ -452,7 +496,7 @@ def upload(request):
             finally:
                 if default_storage.exists(path_rel):
                     default_storage.delete(path_rel)
-                allowed.remove(path_rel)
+                allowed.pop(path_rel, None)
         request.session["staged_paths"] = allowed
         request.session.modified = True
         messages.success(request, f"{n_ok} file diproses, {n_err} gagal.")
@@ -488,10 +532,16 @@ def upload(request):
         if preview:
             # Daftarkan path staging ke sesi (akumulatif — analyze bisa
             # dipanggil berkali-kali menambah file); commit menolak path lain.
-            request.session["staged_paths"] = (
-                request.session.get("staged_paths", [])
-                + [p["staged"] for p in preview]
-            )
+            # W6-4: tiap path diikat ke TOKO yang aktif saat analyze, di-MERGE
+            # dgn isi store terkini (tab lain tak tertimpa penuh), dan dibatasi
+            # _STAGED_SESSION_CAP entri (tertua dibuang).
+            merged = _staged_map(_fresh_session_staged(request))
+            merged.update(_staged_map(request.session.get("staged_paths")))
+            for p in preview:
+                merged[p["staged"]] = active.pk
+            while len(merged) > _STAGED_SESSION_CAP:
+                merged.pop(next(iter(merged)))
+            request.session["staged_paths"] = merged
             request.session.modified = True
         if dilewati or diekstrak:
             messages.info(

@@ -211,6 +211,107 @@ class UploadCommitTests(TestCase):
         for p in paths:
             default_storage.delete(p)
 
+    def test_commit_toko_beda_ditolak(self):
+        """W6-4a: path dianalisa saat toko A aktif → ganti toko B → commit
+        DITOLAK dengan pesan jelas; file staging tidak terhapus (bisa analisa
+        ulang / kembali ke toko A)."""
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        staged = r.context["preview"][0]["staged"]
+        lain = Toko.objects.filter(is_active=True).exclude(pk=self.lbs.pk).first()
+        self.client.post(reverse("set_toko"), {"toko_id": lain.id})
+        try:
+            n_up = Upload.objects.count()
+            r2 = self.client.post(reverse("upload"), {
+                "action": "commit", "staged": [staged],
+                "parser_key": ["bri"], "flow": [""],
+            }, follow=True)
+            self.assertContains(r2, "dianalisa untuk toko")
+            self.assertContains(r2, self.lbs.name)
+            self.assertEqual(Upload.objects.count(), n_up)
+            self.assertTrue(default_storage.exists(staged))
+            # Path tetap terdaftar di sesi — kembali ke toko asal masih bisa commit.
+            self.assertIn(staged, self.client.session.get("staged_paths", {}))
+        finally:
+            if default_storage.exists(staged):
+                default_storage.delete(staged)
+
+    def test_commit_toko_sama_diterima_dan_terikat(self):
+        """W6-4a: format sesi baru = {path: toko_id}; alur normal satu toko jalan."""
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        staged = r.context["preview"][0]["staged"]
+        self.assertEqual(
+            self.client.session.get("staged_paths", {}).get(staged), self.lbs.pk
+        )
+        r2 = self.client.post(reverse("upload"), {
+            "action": "commit", "staged": [staged],
+            "parser_key": ["bri"], "flow": [""],
+        })
+        self.assertEqual(r2.status_code, 302)
+        self.assertFalse(default_storage.exists(staged))
+        self.assertNotIn(staged, self.client.session.get("staged_paths", {}))
+
+    def test_analyze_merge_dgn_isi_store_sesi(self):
+        """W6-4b: analyze MERGE (union) dgn nilai session store — entri tab lain
+        tidak hilang tertimpa."""
+        session = self.client.session
+        session["staged_paths"] = {"staging/tab-lain.csv": self.lbs.pk}
+        session.save()
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        staged = r.context["preview"][0]["staged"]
+        paths = self.client.session.get("staged_paths", {})
+        self.assertIn("staging/tab-lain.csv", paths)
+        self.assertIn(staged, paths)
+        default_storage.delete(staged)
+
+    def test_daftar_sesi_dibatasi_300_buang_tertua(self):
+        """W6-4c: cap 300 entri — entri TERTUA dibuang saat melebihi."""
+        session = self.client.session
+        session["staged_paths"] = {
+            f"staging/lama-{i}.csv": self.lbs.pk for i in range(300)
+        }
+        session.save()
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        staged = r.context["preview"][0]["staged"]
+        paths = self.client.session.get("staged_paths", {})
+        self.assertEqual(len(paths), 300)
+        self.assertIn(staged, paths)
+        self.assertNotIn("staging/lama-0.csv", paths)  # tertua terbuang
+        default_storage.delete(staged)
+
+    def test_format_sesi_lama_list_tetap_diterima(self):
+        """W6-4 kompat: sesi lama berformat list (tanpa toko) tetap bisa commit
+        ke toko aktif apa pun — umur sesi pendek, tak perlu ditolak."""
+        staged = default_storage.save("staging/x.csv", ContentFile(b"dummy"))
+        self._stage_in_session(staged)  # helper menulis format list lama
+        with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False):
+            r = self.client.post(reverse("upload"), {
+                "action": "commit", "staged": [staged],
+                "parser_key": ["dummy"], "flow": [""], "provider": "Nexus",
+            })
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Upload.objects.latest("id").toko, self.lbs)
+        self.assertFalse(default_storage.exists(staged))
+
     def test_commit_rejects_path_traversal(self):
         n_up = Upload.objects.count()
         with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False), \
