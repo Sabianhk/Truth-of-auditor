@@ -69,6 +69,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.humanize',
+    # pihak ketiga
+    'axes',
     # local apps
     'core',
     'accounts',
@@ -90,6 +92,7 @@ MIDDLEWARE = [
     'web.middleware.ForcePasswordChangeMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'truth_auditor.urls'
@@ -204,6 +207,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- Truth of Auditor ---
 AUTH_USER_MODEL = 'accounts.User'
+
+# --- Brute-force login (django-axes) ---
+# Off saat suite tes (client.login() tanpa request tidak kompatibel dgn backend
+# axes); tes lockout sendiri menyalakannya via override_settings.
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_ENABLED = 'test' not in sys.argv
+# Di belakang proxy Railway REMOTE_ADDR = IP internal yang berganti-ganti;
+# tanpa ini kombo username+IP tak pernah mencapai limit (lockout mati).
+from truth_auditor.security import client_ip  # noqa: E402
+
+AXES_CLIENT_IP_CALLABLE = client_ip
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1  # jam; lockout lepas sendiri
+AXES_RESET_ON_SUCCESS = True
+AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]  # kunci kombo user+IP
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = '/'

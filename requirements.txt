@@ -2,6 +2,7 @@
 # CI/Railway harus memasang paket yang SAMA, bukan "apa pun yang terbaru".
 # pandas dihapus: tidak diimpor di mana pun (dependency mati yang berat).
 Django==5.2.15
+django-axes==8.3.1
 openpyxl==3.1.5
 msoffcrypto-tool==6.0.0
 olefile==0.47
