@@ -88,17 +88,26 @@ def resolve_bracket_hash(raw, stored):
 
     Era formula yang diuji (kronologis): (1) awal — tanpa cabang manual,
     TICKET_RE 6-9; (2) cabang manual + TICKET_RE 6-9; (3) formula baru (bila
-    cocok → baris sudah benar, kembalikan `stored`). Masing-masing di bawah
-    dua asumsi sel kosong (openpyxl None vs reader mentah ""). Tak ada yang
-    mereproduksi `stored` → None (data tak terduga; pemanggil melewati baris)."""
+    cocok → baris sudah benar). Masing-masing di bawah dua asumsi sel kosong
+    (openpyxl None vs reader mentah "").
+
+    SEMUA kecocokan dikumpulkan, bukan yang pertama: dua asumsi bisa sama-sama
+    mereproduksi hash lama (mis. Transaction ID absen → "" di kedua asumsi)
+    padahal hash BARUNYA beda (cabang manual meng-hash Jam kosong: None vs "").
+    Provenance terbukti hanya bila semua kecocokan menyiratkan SATU hash baru;
+    selain itu → None (ambigu/tak terduga; pemanggil melewati baris — dihitung
+    `provenance_unknown`)."""
+    tersirat = set()
     for empty in (None, ""):
         if _bracket_hash(raw, empty) == stored:
-            return stored  # sudah formula baru — tak perlu diubah
+            tersirat.add(stored)  # sudah formula baru di bawah asumsi ini
     for empty in (None, ""):
         for manual in (False, True):
             if _bracket_hash(raw, empty, ticket_re=_OLD_TICKET_RE,
                              manual_branch=manual) == stored:
-                return _bracket_hash(raw, empty)
+                tersirat.add(_bracket_hash(raw, empty))
+    if len(tersirat) == 1:
+        return tersirat.pop()
     return None
 
 

@@ -374,6 +374,21 @@ class BracketProvenanceTests(TestCase):
         self.assertEqual(stats["provenance_unknown"], 1)
         self.assertEqual(stats["updated"], 0)
 
+    def test_provenance_ambigu_dua_asumsi_dilewati(self):
+        # Kolom "Transaction ID" ABSEN (bukan "") → _cell → "" di KEDUA asumsi
+        # → hash era-1 identik utk openpyxl maupun reader mentah; tapi cabang
+        # manual formula baru meng-hash "Jam" kosong (None vs "") → hash baru
+        # BEDA. Provenance tak terbukti tunggal → jangan menebak, lewati.
+        raw = {"Description": "Beban Admin QRIS", "Username": "",
+               "Total": "-5000", "Tanggal": "27/06/2026", "Jam": ""}
+        old = row_hash("bracket", ["", "", "", Decimal("5000")])
+        t = self._tx(old, raw)
+        stats = recompute_all(Transaction)
+        t.refresh_from_db()
+        self.assertEqual(t.row_hash, old)
+        self.assertEqual(stats["provenance_unknown"], 1)
+        self.assertEqual(stats["updated"], 0)
+
     def test_era_ticket_re_lama_manual_branch_tetap_teremap(self):
         # Era antara: cabang manual sudah ada, TICKET_RE masih 6-9 digit —
         # ticket 10 digit tak terdeteksi → dulu jatuh ke cabang manual.
