@@ -5,6 +5,15 @@ from decimal import Decimal
 from .base import BaseParser, parse_decimal, parse_dt, read_xlsx_grid, read_xlsx_rows, row_hash
 
 
+def _require_flow(flow):
+    """Parser dua-arah WAJIB tahu arah file. Dulu flow selain "wd" diam-diam
+    dianggap DP — file WD tanpa token "wd" di nama = seluruh file kebalik
+    tanda. Fail-loud: pesan ini tampil sebagai error file saat commit upload."""
+    if flow not in ("dp", "wd"):
+        raise ValueError("flow tidak diketahui — pilih DP/WD saat upload")
+    return flow
+
+
 def _money(amount, flow):
     """Tanda money_delta berdasarkan flow file (dp = masuk +, wd = keluar -)."""
     return -amount if flow == "wd" else amount
@@ -14,6 +23,7 @@ class NXPayParser(BaseParser):
     source_key = "gateway"
 
     def parse(self, path, flow=""):
+        _require_flow(flow)
         _, rows = read_xlsx_rows(path, header_row=2)  # baris 1 = judul report
         out = []
         for r in rows:
@@ -52,6 +62,7 @@ class QRFlyerParser(BaseParser):
     source_key = "gateway"
 
     def parse(self, path, flow=""):
+        _require_flow(flow)
         _, rows = read_xlsx_rows(path, header_row=1)
         out = []
         for r in rows:
@@ -93,6 +104,7 @@ class QHokiParser(BaseParser):
     source_key = "gateway"
 
     def parse(self, path, flow=""):
+        _require_flow(flow)
         if str(path).lower().endswith(".csv"):
             with open(path, newline="", encoding="utf-8-sig", errors="replace") as f:
                 rows = list(csv.DictReader(f))

@@ -1,4 +1,5 @@
 import os
+import re
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -6,10 +7,15 @@ from sources.services import PARSERS, ingest
 
 
 def detect_flow(path):
+    """Tebak arah file dari TOKEN utuh nama file (dipisah non-alfanumerik).
+
+    Substring pernah salah tebak: "CROWDFUND" mengandung "wd" -> file DP
+    dianggap WD. Prioritas wd > dp dipertahankan (perilaku lama)."""
     name = os.path.basename(path).lower()
-    if "wd" in name:
+    toks = re.split(r"[^a-z0-9]+", name)
+    if "wd" in toks:
         return "wd"
-    if "dp" in name:
+    if "dp" in toks:
         return "dp"
     return ""
 
