@@ -20,6 +20,27 @@ class UploadAnalyzeTests(TestCase):
         User.objects.create_user("aud", "a@a.co", "pw12345", role="supervisor")
         self.client.login(username="aud", password="pw12345")
 
+    def test_deteksi_gagal_dapat_placeholder_pilih_jenis(self):
+        """W3-8: deteksi gagal (parser_key "") → dropdown menampilkan opsi
+        placeholder terpilih, bukan auto-pilih opsi pertama (bca_csv) senyap."""
+        f = SimpleUploadedFile("misteri.csv", b"foo,bar\n1,2\n", content_type="text/csv")
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["preview"][0]["parser_key"], "")
+        self.assertIn('<option value="" selected>— pilih jenis —</option>',
+                      r.content.decode())
+
+    def test_deteksi_sukses_placeholder_tidak_terpilih(self):
+        f = SimpleUploadedFile(
+            "bri.csv",
+            b"TGL_TRAN,MUTASI_DEBET,MUTASI_KREDIT,DESK_TRAN\n",
+            content_type="text/csv",
+        )
+        r = self.client.post(reverse("upload"), {"action": "analyze", "files": [f]})
+        html = r.content.decode()
+        self.assertIn('<option value="">— pilih jenis —</option>', html)
+        self.assertNotIn('<option value="" selected>— pilih jenis —</option>', html)
+
     def test_analyze_detects_bri(self):
         f = SimpleUploadedFile(
             "bri.csv",
@@ -108,6 +129,22 @@ class UploadCommitTests(TestCase):
             self.assertEqual(Upload.objects.count(), n_up)
             self.assertTrue(default_storage.exists(staged))
             self.assertContains(r, "tidak sinkron")
+        finally:
+            if default_storage.exists(staged):
+                default_storage.delete(staged)
+
+    def test_commit_key_kosong_pesan_sebut_nama_file(self):
+        """W3-8: parser_key kosong ditolak DENGAN pesan yang menyebut nama
+        file (dulu senyap, cuma terhitung gagal)."""
+        staged = default_storage.save("staging/tanpa-jenis.csv", ContentFile(b"dummy"))
+        self._stage_in_session(staged)
+        try:
+            r = self.client.post(reverse("upload"), {
+                "action": "commit", "staged": [staged],
+                "parser_key": [""], "flow": [""], "provider": "",
+            }, follow=True)
+            self.assertContains(r, "tanpa-jenis")
+            self.assertTrue(default_storage.exists(staged))
         finally:
             if default_storage.exists(staged):
                 default_storage.delete(staged)

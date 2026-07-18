@@ -179,6 +179,8 @@
         <td>{{ p.name }}<input type="hidden" name="staged" value="{{ p.staged }}"></td>
         <td>
           <select name="parser_key" class="f">
+            {# Deteksi gagal (parser_key "") → placeholder terpilih, jangan browser auto-pilih opsi pertama (bca_csv) senyap. Commit menolak value kosong. #}
+            <option value=""{% if not p.parser_key %} selected{% endif %}>— pilih jenis —</option>
             {% for pk in parsers %}<option value="{{ pk }}" {% if pk == p.parser_key %}selected{% endif %}>{{ pk }}</option>{% endfor %}
           </select>
         </td>

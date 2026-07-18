@@ -421,6 +421,11 @@ def upload(request):
                 n_err += 1
                 continue
             if key not in PARSERS:
+                messages.error(
+                    request,
+                    f"{os.path.basename(path_rel)}: jenis file belum dipilih/"
+                    f"tidak dikenal — pilih jenis lalu ulangi.",
+                )
                 n_err += 1
                 continue
             try:
