@@ -313,6 +313,60 @@ class LateSettlementTests(_Base):
         self.assertFalse(MatchResult.objects.filter(run__batch=b28, left=p).exists())
 
 
+class ExpiryWindowAsalTests(_Base):
+    """W1-4: kadaluarsa carried dinilai pakai window batch ASAL (prior.run.tolerance),
+    bukan toleransi run hari ini — profil Ketat hari ini tidak boleh mengubur
+    carried Longgar sebelum deadline-nya (konsisten dgn tampilan web/settlement.py)."""
+
+    def _carried_dgn_window(self, tol):
+        p = self._tx(self.panel, "depo", "50000", "50000", "D1", "p1",
+                     username="budi", dt=datetime(2026, 6, 27, 21, 0))
+        self._tx(self.bank, "depo", "70000", "70000", "", "k1", username="siti")
+        b27 = run_batch(self.lbs, tol, recon_date=date(2026, 6, 27))
+        p.refresh_from_db()
+        self.assertIsNone(p.consumed_by_batch)  # carried
+        return p, b27
+
+    def test_profil_ketat_hari_ini_tak_mengubur_carried_longgar(self):
+        longgar3 = ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+        p, b27 = self._carried_dgn_window(longgar3)
+        # Run 29 memakai window 1 (Default); umur baris 2 hari — menurut window
+        # ASAL (3) masih bisa settle sampai run 30.
+        self._tx(self.bank, "depo", "90000", "90000", "", "k9",
+                 username="rudi", dt=datetime(2026, 6, 29, 10, 0))
+        b29 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 29))
+        p.refresh_from_db()
+        self.assertIsNone(p.consumed_by_batch)  # masih menunggu, TIDAK kadaluarsa
+        self.assertEqual(b29.summary["late_settlement"]["expired"], [])
+        r = MatchResult.objects.get(run__batch=b27, left=p)
+        self.assertEqual(r.reason_code, "no_money")
+        # Run 30: uangnya muncul (selisih 3 hari, masih dalam window asal) → settle.
+        uang = self._tx(self.bank, "depo", "50000", "50000", "", "k2",
+                        username="budi", dt=datetime(2026, 6, 30, 1, 0))
+        b30 = run_batch(self.lbs, longgar3, recon_date=date(2026, 6, 30))
+        r.refresh_from_db()
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.right, uang)
+        self.assertEqual(r.resolved_by_batch, b30)
+
+    def test_profil_longgar_hari_ini_tak_memperpanjang_deadline_carried_ketat(self):
+        longgar3 = ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+        p, b27 = self._carried_dgn_window(self.tol)  # asal window 1
+        # Run 29 pakai window 3 — deadline baris tetap milik window ASAL (1):
+        # sudah lewat → kadaluarsa diam-diam ke batch asal.
+        self._tx(self.bank, "depo", "90000", "90000", "", "k9",
+                 username="rudi", dt=datetime(2026, 6, 29, 10, 0))
+        b29 = run_batch(self.lbs, longgar3, recon_date=date(2026, 6, 29))
+        p.refresh_from_db()
+        self.assertEqual(p.consumed_by_batch, b27)
+        self.assertEqual(b29.summary["late_settlement"]["expired"],
+                         [{"tx": p.id, "home": b27.id}])
+
+
 class RetroSusulanTests(_Base):
     """Baris SUSULAN: transaksi bertanggal D yang baru muncul di upload berikutnya,
     padahal batch tanggal D sudah ada → hasil & totalnya ditulis ke batch D."""

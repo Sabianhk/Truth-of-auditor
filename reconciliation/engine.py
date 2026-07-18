@@ -209,8 +209,8 @@ def _toko_filter(qs, toko):
 def _can_still_settle(d, recon_date, window):
     """Baris kredit tanggal `d` masih bisa dapat uang pada run tanggal berikutnya
     (>= recon_date+1): d + window >= recon_date + 1  ⟺  d > recon_date - window.
-    Catatan: window diambil dari toleransi run BERJALAN — ganti profil antar hari
-    (mis. Longgar → Ketat) membuat carry lama langsung dianggap kadaluarsa."""
+    Catatan: untuk carried, `window` = toleransi batch ASAL baris itu (W1-4) —
+    ganti profil antar hari tidak menggeser deadline baris lama."""
     return d is not None and d > recon_date - timedelta(days=window)
 
 
@@ -640,8 +640,11 @@ def _carried_qs(tokos):
 
 
 def _carried_results(toko):
-    """left_id → MatchResult no_money carry-over (lihat `_carried_qs`)."""
-    qs = _carried_qs([toko]).select_related("left", "run", "run__batch").order_by("id")
+    """left_id → MatchResult no_money carry-over (lihat `_carried_qs`).
+    run__tolerance ikut di-select: expiry dinilai pakai window batch ASAL."""
+    qs = _carried_qs([toko]).select_related(
+        "left", "run", "run__batch", "run__tolerance"
+    ).order_by("id")
     return {r.left_id: r for r in qs}  # id terbesar menang (defensif bila ganda)
 
 
@@ -1099,11 +1102,16 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         # 2) Carried tak settle & sudah lewat window → kadaluarsa: konsumsi diam-diam
         #    ke batch asal (tidak_cocok-nya sudah tercatat di sana). Jejak {tx, home}
         #    disimpan agar bisa dipulihkan bila batch ini dihapus.
+        #    W1-4: window per baris = toleransi batch ASALnya (prior.run.tolerance)
+        #    — profil hari ini (Ketat/Longgar) tidak mengubah deadline baris lama,
+        #    konsisten dgn deadline yang ditampilkan web/settlement.py.
         for left_id, prior in carried.items():
             if left_id in resolved_ids:
                 continue
             d = prior.left.occurred_at.date() if prior.left.occurred_at else None
-            if not _can_still_settle(d, recon_date, window):
+            w = (prior.run.tolerance.date_window_days
+                 if prior.run.tolerance_id else window)
+            if not _can_still_settle(d, recon_date, w):
                 by_home.setdefault(prior.run.batch_id, []).append(left_id)
                 expired.append({"tx": left_id, "home": prior.run.batch_id})
         # 2b) Baris SUSULAN → konsumsi ke batch tanggal asalnya, KECUALI panel
