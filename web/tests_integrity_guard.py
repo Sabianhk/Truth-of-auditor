@@ -122,6 +122,67 @@ class DeleteUploadGuardTests(_Base):
         self.assertContains(r, "Hapus terpilih")       # tombol hapus massal
 
 
+class DeleteUploadCliRunGuardTests(_Base):
+    """W3-4a: run CLI (tanpa batch) juga mengunci upload — _locking_batches
+    lama meng-exclude run tanpa batch, sehingga upload yang direferensi hasil
+    run CLI bisa dihapus dan MatchResult-nya lenyap."""
+
+    def _cli_run(self):
+        return MatchRun.objects.create(
+            relation=MatchRun.Relation.PANEL_BANK, tolerance=self.tol, batch=None,
+        )
+
+    def test_blokir_bila_direferensi_run_cli(self):
+        up = self._upload(name="cli.xlsx")
+        MatchResult.objects.create(run=self._cli_run(), bucket=MatchResult.Bucket.TIDAK,
+                                   left=self._tx(up), reason_code="no_money")
+        r = self.client.post(reverse("delete_upload", args=[up.pk]), follow=True)
+        self.assertTrue(Upload.objects.filter(pk=up.pk).exists())
+        self.assertContains(r, "run CLI")
+
+    def test_bulk_melewati_upload_terkunci_run_cli(self):
+        up = self._upload(name="cli-bulk.xlsx")
+        MatchResult.objects.create(run=self._cli_run(), bucket=MatchResult.Bucket.COCOK,
+                                   right=self._tx(up), reason_code="")
+        r = self.client.post(reverse("bulk_delete_uploads"),
+                             {"upload_ids": [up.pk]}, follow=True)
+        self.assertTrue(Upload.objects.filter(pk=up.pk).exists())
+        self.assertContains(r, "cli-bulk.xlsx")
+
+
+class DeleteUploadDuplicateGuardTests(_Base):
+    """W3-4b: baris upload A juga 'milik' upload B via M2M duplicate_transactions
+    (file bank rolling/tumpang-tindih). Hapus A meng-cascade transaksinya →
+    isi file B bolong senyap. Blokir A; B (pemegang link duplikat) tetap bebas."""
+
+    def _pasangan_duplikat(self):
+        a = self._upload(name="asli.xlsx")
+        tx = self._tx(a)
+        b = self._upload(name="pemegang-duplikat.xlsx")
+        b.duplicate_transactions.add(tx)
+        return a, b, tx
+
+    def test_blokir_pemilik_baris_duplikat(self):
+        a, b, tx = self._pasangan_duplikat()
+        r = self.client.post(reverse("delete_upload", args=[a.pk]), follow=True)
+        self.assertTrue(Upload.objects.filter(pk=a.pk).exists())
+        self.assertContains(r, "duplikat")
+
+    def test_pemegang_duplikat_tetap_bisa_dihapus(self):
+        a, b, tx = self._pasangan_duplikat()
+        self.client.post(reverse("delete_upload", args=[b.pk]))
+        self.assertFalse(Upload.objects.filter(pk=b.pk).exists())
+        self.assertTrue(Transaction.objects.filter(pk=tx.pk).exists(),
+                        "transaksi milik upload asli tidak boleh ikut hilang")
+
+    def test_bulk_melewati_pemilik_baris_duplikat(self):
+        a, b, tx = self._pasangan_duplikat()
+        r = self.client.post(reverse("bulk_delete_uploads"),
+                             {"upload_ids": [a.pk]}, follow=True)
+        self.assertTrue(Upload.objects.filter(pk=a.pk).exists())
+        self.assertContains(r, "asli.xlsx")
+
+
 class HollowDetectionTests(_Base):
     def test_batch_cangkang_dapat_banner(self):
         batch, _ = self._batch(summary={"buckets": {"cocok": 100, "perlu_tinjau": 5, "tidak_cocok": 10}})

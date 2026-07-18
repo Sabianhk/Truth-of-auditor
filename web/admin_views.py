@@ -12,7 +12,7 @@ from django.urls import reverse
 from core.audit import catat
 from core.models import AuditLog
 from reconciliation.engine import revert_late_settlements
-from reconciliation.models import MatchResult, ReconBatch
+from reconciliation.models import MatchResult, MatchRun, ReconBatch
 from sources.models import Toko, Upload
 from transactions.models import Transaction
 from web.access import admin_required
@@ -43,6 +43,33 @@ def _locking_batches(upload):
         .values_list("consumed_by_batch", flat=True)
     )
     return list(ReconBatch.objects.filter(id__in=batch_ids).order_by("id"))
+
+
+def _cli_locking_runs(upload):
+    """Run CLI (tanpa batch) yang hasilnya mereferensi transaksi upload ini.
+
+    `_locking_batches` sengaja meng-exclude run tanpa batch (id batch dipakai
+    di pesannya) — tanpa cek ini, upload yang direferensi hasil run CLI bisa
+    dihapus dan MatchResult-nya lenyap senyap. Hapus run-nya dulu.
+    """
+    run_ids = set(
+        MatchResult.objects.filter(
+            Q(left__upload=upload) | Q(right__upload=upload),
+            run__batch__isnull=True,
+        ).values_list("run_id", flat=True)
+    )
+    return list(MatchRun.objects.filter(id__in=run_ids).order_by("id"))
+
+
+def _shared_duplicate_uploads(upload):
+    """Upload LAIN yang baris duplikatnya (M2M duplicate_transactions) menunjuk
+    transaksi milik upload ini — file bank rolling/tumpang-tindih. Menghapus
+    upload ini meng-cascade transaksinya → isi file upload lain bolong senyap.
+    Blokir; hapus upload duplikatnya dulu."""
+    return list(
+        Upload.objects.filter(duplicate_transactions__upload=upload)
+        .exclude(pk=upload.pk).distinct().order_by("id")
+    )
 
 
 VALID_ROLES = ("admin", "supervisor", "auditor")
@@ -273,6 +300,24 @@ def delete_upload(request, pk):
                 f"Hapus batch itu dulu (tanpa file ini hasilnya tidak sah).",
             )
             return redirect("upload")
+        cli_runs = _cli_locking_runs(up)
+        if cli_runs:
+            nomor = ", ".join(f"#{r.pk}" for r in cli_runs)
+            messages.error(
+                request,
+                f"{name} tidak bisa dihapus — transaksinya dipakai hasil run CLI "
+                f"({nomor}). Hapus run-nya dulu.",
+            )
+            return redirect("upload")
+        dups = _shared_duplicate_uploads(up)
+        if dups:
+            nama_dup = ", ".join(d.original_name or f"Upload #{d.pk}" for d in dups)
+            messages.error(
+                request,
+                f"{name} tidak bisa dihapus — baris upload ini juga milik upload "
+                f"lain (duplikat): {nama_dup}. Hapus upload duplikatnya dulu.",
+            )
+            return redirect("upload")
         n_tx = up.transactions.count()
         toko = up.toko
         if up.file:
@@ -296,7 +341,7 @@ def bulk_delete_uploads(request):
         dilewati = []
         terhapus = []
         for up in ups:
-            if _locking_batches(up):
+            if _locking_batches(up) or _cli_locking_runs(up) or _shared_duplicate_uploads(up):
                 dilewati.append(up.original_name or f"Upload #{up.pk}")
                 continue
             nama = up.original_name or f"Upload #{up.pk}"
@@ -314,8 +359,9 @@ def bulk_delete_uploads(request):
         if dilewati:
             messages.error(
                 request,
-                f"{len(dilewati)} file dilewati karena dipakai hasil rekonsiliasi: "
-                f"{', '.join(dilewati)}. Hapus batch terkait dulu.",
+                f"{len(dilewati)} file dilewati karena dipakai hasil rekonsiliasi/"
+                f"run CLI atau berbagi baris duplikat dengan upload lain: "
+                f"{', '.join(dilewati)}. Hapus batch/run/upload terkait dulu.",
             )
     # Kembali ke halaman riwayat asal (digit-only → aman dari open redirect);
     # halaman yang jadi kosong usai hapus di-clamp get_page ke halaman terakhir.
