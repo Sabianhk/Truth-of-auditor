@@ -994,6 +994,14 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
               recon_date=None):
     """Atomic: kegagalan di tengah run me-rollback SEMUANYA (termasuk baris batch),
     sehingga tanggal harian tidak terblokir constraint unik oleh batch yatim."""
+    # Serialisasi PER TOKO: dua run konkuren (meski beda tanggal) membaca pool
+    # aktif yang sama → MatchResult ganda / summary dobel. select_for_update
+    # baris Toko menahan run kedua sampai run pertama commit. (No-op di sqlite
+    # dev — efektif di Postgres/production.)
+    from sources.models import Toko  # impor lokal: hindari siklus (pola _operator_names)
+
+    if toko is not None and toko.pk is not None:
+        toko = Toko.objects.select_for_update().get(pk=toko.pk)
     tolerance = tolerance or ToleranceProfile.objects.get(name="Default")
     if recon_date and ReconBatch.objects.filter(toko=toko, recon_date=recon_date).exists():
         raise ValueError(f"Sudah ada batch untuk {toko} tanggal {recon_date}.")
