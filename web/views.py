@@ -323,8 +323,9 @@ _STAGED_SESSION_CAP = 300
 def _staged_map(value):
     """Normalisasi `staged_paths` sesi → dict {path: toko_id|None} (W6-4).
     Format baru = dict path→toko saat analyze; format LAMA (list, sesi yang
-    hidup melewati deploy) diterima sebagai valid TANPA toko (None = tak
-    di-enforce — umur sesi pendek, commit stale sudah tertangani guard lain)."""
+    hidup melewati deploy) dipetakan ke None — dan commit MENOLAK entri None
+    (W7-4: tanpa toko, cek lintas-toko tak bisa di-enforce; user diminta
+    analisa ulang)."""
     if isinstance(value, dict):
         return dict(value)
     return {p: None for p in (value or [])}
@@ -461,9 +462,20 @@ def upload(request):
             # W6-4a: path terikat toko yang aktif SAAT ANALYZE — commit dengan
             # toko aktif berbeda (multi-tab / ganti toko di tengah) ditolak;
             # file & entri sesi dibiarkan supaya bisa commit setelah kembali ke
-            # toko asal atau analisa ulang. None = format sesi lama (tanpa toko).
+            # toko asal atau analisa ulang.
             path_toko = allowed[path_rel]
-            if path_toko is not None and path_toko != active.pk:
+            if path_toko is None:
+                # W7-4: entri format sesi LAMA (list tanpa toko, sesi yang
+                # hidup melewati deploy) — cek lintas-toko tak bisa
+                # di-enforce → TOLAK, jangan biarkan bypass bertahan.
+                messages.error(
+                    request,
+                    f"{os.path.basename(path_rel)}: sesi analisa lama — "
+                    f"analisa ulang (pembaruan keamanan).",
+                )
+                n_err += 1
+                continue
+            if path_toko != active.pk:
                 nama = (
                     Toko.objects.filter(pk=path_toko)
                     .values_list("name", flat=True).first() or f"#{path_toko}"

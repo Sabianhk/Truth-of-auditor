@@ -81,9 +81,14 @@ class UploadCommitTests(TestCase):
         self.client.post(reverse("set_toko"), {"toko_id": self.lbs.id})
 
     def _stage_in_session(self, staged):
-        """Daftarkan path staging ke sesi seolah hasil analyze (kontrak W3-1)."""
+        """Daftarkan path staging ke sesi seolah hasil analyze (format dict
+        W6-4: path → toko aktif saat analyze)."""
         session = self.client.session
-        session["staged_paths"] = session.get("staged_paths", []) + [staged]
+        cur = session.get("staged_paths") or {}
+        if not isinstance(cur, dict):
+            cur = {p: self.lbs.pk for p in cur}
+        cur[staged] = self.lbs.pk
+        session["staged_paths"] = cur
         session.save()
 
     def test_commit_ingests_and_sets_toko(self):
@@ -298,19 +303,28 @@ class UploadCommitTests(TestCase):
         self.assertNotIn("staging/lama-0.csv", paths)  # tertua terbuang
         default_storage.delete(staged)
 
-    def test_format_sesi_lama_list_tetap_diterima(self):
-        """W6-4 kompat: sesi lama berformat list (tanpa toko) tetap bisa commit
-        ke toko aktif apa pun — umur sesi pendek, tak perlu ditolak."""
+    def test_format_sesi_lama_list_ditolak(self):
+        """W7-4: entri sesi format LAMA (list tanpa toko) DITOLAK saat commit —
+        tanpa toko, cek lintas-toko tak bisa di-enforce, dan bypass itu bisa
+        bertahan utk sesi yang hidup melewati deploy. User diminta analisa
+        ulang (pembaruan keamanan); tidak ada yang di-ingest."""
         staged = default_storage.save("staging/x.csv", ContentFile(b"dummy"))
-        self._stage_in_session(staged)  # helper menulis format list lama
-        with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False):
-            r = self.client.post(reverse("upload"), {
-                "action": "commit", "staged": [staged],
-                "parser_key": ["dummy"], "flow": [""], "provider": "Nexus",
-            })
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(Upload.objects.latest("id").toko, self.lbs)
-        self.assertFalse(default_storage.exists(staged))
+        session = self.client.session
+        session["staged_paths"] = [staged]  # format list lama (tanpa toko)
+        session.save()
+        try:
+            n_up = Upload.objects.count()
+            with patch.dict(services.PARSERS, {"dummy": _DummyBracket}, clear=False), \
+                    patch("web.views.ingest", side_effect=AssertionError("must not ingest")):
+                r = self.client.post(reverse("upload"), {
+                    "action": "commit", "staged": [staged],
+                    "parser_key": ["dummy"], "flow": [""], "provider": "Nexus",
+                }, follow=True)
+            self.assertEqual(Upload.objects.count(), n_up)
+            self.assertContains(r, "analisa ulang (pembaruan keamanan)")
+        finally:
+            if default_storage.exists(staged):
+                default_storage.delete(staged)
 
     def test_commit_rejects_path_traversal(self):
         n_up = Upload.objects.count()
