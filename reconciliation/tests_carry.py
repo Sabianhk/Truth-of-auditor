@@ -547,6 +547,9 @@ class RetroSusulanTests(_Base):
     def test_uang_susulan_tanpa_pasangan_dapat_hasil_no_panel_di_home(self):
         # W1-5: uang susulan TAK berpasangan dikonsumsi ke batch asal — dulu
         # tanpa MatchResult (hilang dari antrean tinjau & summary unmatched home).
+        # W6-6: bucket = TIDAK (konsisten dgn no_panel klasifikasi b/d) — semua
+        # baris no_panel sejenis berkumpul di tab 'tidak_ada_panel', tidak
+        # terpecah antara tab Tinjau dan Tidak Cocok.
         b27 = self._batch27_selesai()
         k3 = self._tx(self.bank, "depo", "90000", "90000", "", "k3",
                       username="rudi", dt=datetime(2026, 6, 27, 23, 30))
@@ -556,12 +559,13 @@ class RetroSusulanTests(_Base):
         r = MatchResult.objects.get(right=k3)
         self.assertEqual(r.run.batch, b27)               # hasil di run PANEL_BANK home
         self.assertEqual(r.run.relation, "panel_bank")
-        self.assertEqual(r.bucket, MatchResult.Bucket.TINJAU)
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
         self.assertEqual(r.reason_code, "no_panel")
         self.assertIsNone(r.left)
         self.assertIn("susulan", r.reason_detail.lower())
         b27.refresh_from_db()                            # summary home ter-refresh
-        self.assertEqual(b27.summary["buckets"]["perlu_tinjau"], 1)
+        self.assertEqual(b27.summary["buckets"]["tidak_cocok"], 1)
+        self.assertEqual(b27.summary["buckets"]["perlu_tinjau"], 0)
 
     def test_uang_susulan_home_tanpa_run_panel_bank_dicatat_di_summary(self):
         # Home yang tak punya run PANEL_BANK (mis. batch PANEL_BRACKET saja):

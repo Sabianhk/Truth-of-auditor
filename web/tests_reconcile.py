@@ -128,16 +128,24 @@ class ReviewViewTests(TestCase):
         run = MatchRun.objects.create(
             relation=MatchRun.Relation.PANEL_BANK, tolerance=self.tol, batch=batch
         )
-        # Hasil BERPASANGAN (guard W1-6a: mark_matched butuh baris uang).
+        # Hasil BERPASANGAN dua sisi (guard W1-6a + W6-5a: mark_matched butuh
+        # left DAN right).
+        panel = SourceType.objects.get_or_create(key="panel", defaults={"name": "Panel"})[0]
         bank = SourceType.objects.get_or_create(key="bank", defaults={"name": "Bank"})[0]
         up_b = Upload.objects.create(source_type=bank, toko=self.lbs)
+        left = Transaction.objects.create(
+            upload=up_b, source_type=panel, toko=self.lbs, jenis="depo",
+            amount=Decimal("50000"), money_delta=Decimal("50000"),
+            occurred_at=datetime(2026, 6, 27, 10, 0), row_hash="rv-p1",
+        )
         right = Transaction.objects.create(
             upload=up_b, source_type=bank, toko=self.lbs, jenis="depo",
             amount=Decimal("50000"), money_delta=Decimal("50000"),
             occurred_at=datetime(2026, 6, 27, 11, 0), row_hash="rv-b1",
         )
         self.result = MatchResult.objects.create(
-            run=run, bucket=MatchResult.Bucket.TINJAU, reason_code="init", right=right
+            run=run, bucket=MatchResult.Bucket.TINJAU, reason_code="init",
+            left=left, right=right,
         )
         self.url = reverse("review", args=[self.result.pk])
 

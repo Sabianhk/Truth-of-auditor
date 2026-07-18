@@ -1307,9 +1307,12 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
                 home.summary = s_home
                 home.save(update_fields=["summary"])
                 continue
+            # W6-6: bucket TIDAK — konsisten dgn no_panel klasifikasi b/d (B2),
+            # supaya semua baris no_panel berkumpul di tab 'tidak_ada_panel'
+            # (bucket TIDAK + left null), tidak terpecah ke tab Tinjau.
             MatchResult.objects.bulk_create([
                 MatchResult(
-                    run=pb_home, bucket=MatchResult.Bucket.TINJAU, left=None, right=t,
+                    run=pb_home, bucket=MatchResult.Bucket.TIDAK, left=None, right=t,
                     score=0, reason_code="no_panel",
                     reason_detail=(
                         f"Uang susulan tanpa catatan panel (via run {recon_date})"
