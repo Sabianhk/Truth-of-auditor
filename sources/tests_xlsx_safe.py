@@ -52,6 +52,46 @@ class XlsxSafeTests(SimpleTestCase):
         self.assertEqual(dicts[0]["Transaction ID"], "abc-123")
         self.assertEqual(str(dicts[0]["Amount"]), "50000")
 
+    def test_sel_tanpa_atribut_r_pakai_posisi_berjalan(self):
+        # Exporter minimal boleh menghilangkan atribut r pada <c> — dulu semua
+        # jatuh ke idx 0 dan saling timpa (hanya sel terakhir yang selamat).
+        sheet = ('<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                 '<row><c t="inlineStr"><is><t>a</t></is></c>'
+                 '<c t="inlineStr"><is><t>b</t></is></c>'
+                 '<c t="inlineStr"><is><t>c</t></is></c></row>'
+                 '</sheetData></worksheet>')
+        fd, path = tempfile.mkstemp(suffix=".xlsx"); os.close(fd)
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("[Content_Types].xml", _CT)
+            z.writestr("_rels/.rels", _RELS)
+            z.writestr("xl/workbook.xml", _WB)
+            z.writestr("xl/_rels/workbook.xml.rels", _WBR)
+            z.writestr("xl/worksheets/sheet1.xml", sheet)
+        try:
+            rows = _raw_xlsx_rows(path)
+        finally:
+            os.remove(path)
+        self.assertEqual(rows, [["a", "b", "c"]])
+
+    def test_sel_campuran_ber_r_dan_tanpa_r(self):
+        # Sel tanpa r melanjutkan dari posisi sel ber-r terakhir.
+        sheet = ('<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+                 '<row r="1"><c r="B1" t="inlineStr"><is><t>x</t></is></c>'
+                 '<c t="inlineStr"><is><t>y</t></is></c></row>'
+                 '</sheetData></worksheet>')
+        fd, path = tempfile.mkstemp(suffix=".xlsx"); os.close(fd)
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("[Content_Types].xml", _CT)
+            z.writestr("_rels/.rels", _RELS)
+            z.writestr("xl/workbook.xml", _WB)
+            z.writestr("xl/_rels/workbook.xml.rels", _WBR)
+            z.writestr("xl/worksheets/sheet1.xml", sheet)
+        try:
+            rows = _raw_xlsx_rows(path)
+        finally:
+            os.remove(path)
+        self.assertEqual(rows, [["", "x", "y"]])
+
     def test_wellformed_data_mempertahankan_nilai_typed(self):
         # File well-formed dengan baris data TIDAK boleh jatuh ke raw reader (yang
         # mengembalikan string) — nilai typed (float/datetime) harus utuh.

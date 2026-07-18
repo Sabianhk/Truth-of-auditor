@@ -68,11 +68,16 @@ def _raw_xlsx_rows(path, nrows=None):
         for _, el in ET.iterparse(io.BytesIO(z.read(sheet))):
             if _xlsx_local(el.tag) != "row":
                 continue
-            cells, maxc = {}, 0
+            cells, maxc, next_idx = {}, 0, 0
             for c in el:
                 if _xlsx_local(c.tag) != "c":
                     continue
-                idx = _xlsx_col_idx(c.attrib.get("r", "")); t = c.attrib.get("t", "")
+                # Sel tanpa atribut `r` (exporter minimal): pakai posisi berjalan
+                # (kolom terakhir + 1) — dulu semua jatuh ke idx 0 & saling timpa.
+                ref = c.attrib.get("r", "")
+                idx = _xlsx_col_idx(ref) if ref else next_idx
+                next_idx = idx + 1
+                t = c.attrib.get("t", "")
                 v, vt, ist = "", None, None
                 for ch in c:
                     lt = _xlsx_local(ch.tag)
