@@ -1019,8 +1019,11 @@ def batch_uang(request, pk):
 @login_required
 def run_detail(request, pk):
     run = get_object_or_404(MatchRun, pk=pk, batch__toko__in=tokos_for(request.user))
+    # right__upload__account ikut: source_label_full membaca upload.account
+    # (provider) — tanpa ini satu query per baris uang di tabel.
     base = MatchResult.objects.filter(run=run).select_related(
-        "left", "right", "right__source_type", "right__upload", "right__account"
+        "left", "right", "right__source_type", "right__upload",
+        "right__account", "right__upload__account",
     )
 
     # Kartu status: 'Tidak Cocok' (masih ada baris kredit / no_money) dipisah dari
@@ -1136,8 +1139,11 @@ def review_queue(request):
     bucket = request.GET.get("bucket", "perlu_tinjau")
     if bucket not in ("perlu_tinjau", "tidak_cocok", "tidak_ada_panel"):
         bucket = "perlu_tinjau"  # param ngawur -> default (back-compat URL lama)
+    # right__account & right__upload__account ikut: source_label_full membaca
+    # keduanya (provider) — tanpa ini satu query per baris uang di tabel.
     base = MatchResult.objects.filter(run__batch__toko=active).select_related(
-        "left", "right", "right__source_type", "right__upload", "run", "run__batch"
+        "left", "right", "right__source_type", "right__upload",
+        "right__account", "right__upload__account", "run", "run__batch",
     )
     flow = request.GET.get("flow", "")
     if flow not in ("depo", "wd"):

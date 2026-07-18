@@ -719,8 +719,10 @@ def _carried_qs(tokos):
 def _carried_results(toko):
     """left_id → MatchResult no_money carry-over (lihat `_carried_qs`).
     run__tolerance ikut di-select: expiry dinilai pakai window batch ASAL."""
+    # run__batch__tolerance ikut: web/settlement.py membaca home.tolerance
+    # (deadline baris = toleransi batch ASAL) — tanpa ini satu query per baris.
     qs = _carried_qs([toko]).select_related(
-        "left", "run", "run__batch", "run__tolerance"
+        "left", "run", "run__batch", "run__tolerance", "run__batch__tolerance"
     ).order_by("id")
     return {r.left_id: r for r in qs}  # id terbesar menang (defensif bila ganda)
 
