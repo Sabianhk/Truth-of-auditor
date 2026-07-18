@@ -37,6 +37,61 @@ class IsEncryptedXlsxTests(TestCase):
         self.assertFalse(services.is_encrypted_xlsx("/no/such/file.xlsx"))
 
 
+class _FakeOle:
+    """Tiruan olefile.OleFileIO: hanya `exists()` atas daftar stream tertentu."""
+
+    def __init__(self, streams):
+        self._streams = set(streams)
+
+    def exists(self, name):
+        return name in self._streams
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def _ole2_file():
+    with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as f:
+        f.write(_OLE2_MAGIC + b"\x00" * 512)
+        return f.name
+
+
+class BiffVsEncryptedTests(TestCase):
+    """Magic OLE2 ≠ pasti terenkripsi: .xls BIFF lawas juga OLE2.
+
+    Bug: semua OLE2 diminta password lalu buntu \"Password salah\". Kini stream
+    dicek via olefile: EncryptionInfo/EncryptedPackage = terenkripsi;
+    Workbook/Book tanpa itu = BIFF lawas -> error jelas dari ingest.
+    """
+
+    def test_biff_bukan_terenkripsi(self):
+        path = _ole2_file()
+        with patch("olefile.OleFileIO", return_value=_FakeOle({"Workbook"})):
+            self.assertFalse(services.is_encrypted_xlsx(path))
+
+    def test_biff_ingest_error_save_as_xlsx(self):
+        path = _ole2_file()
+        with patch("olefile.OleFileIO", return_value=_FakeOle({"Book"})):
+            with self.assertRaises(ValueError) as ctx:
+                services.ingest("bracket", path)
+        self.assertIn("Save As .xlsx", str(ctx.exception))
+
+    def test_stream_enkripsi_tetap_terenkripsi(self):
+        path = _ole2_file()
+        with patch("olefile.OleFileIO",
+                   return_value=_FakeOle({"EncryptionInfo", "EncryptedPackage"})):
+            self.assertTrue(services.is_encrypted_xlsx(path))
+
+    def test_ole2_tak_terbaca_konservatif_dianggap_terenkripsi(self):
+        # olefile gagal parse (isi sampah) -> pertahankan perilaku lama:
+        # minta password (lebih aman daripada crash parser downstream).
+        path = _ole2_file()
+        self.assertTrue(services.is_encrypted_xlsx(path))
+
+
 class IngestEncryptedGuardTests(TestCase):
     def test_missing_password_raises_before_parse(self):
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:

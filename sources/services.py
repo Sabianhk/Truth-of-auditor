@@ -55,14 +55,40 @@ PARSERS = {
 _OLE2_MAGIC = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
 
 
-def is_encrypted_xlsx(path):
-    """True bila `path` adalah xlsx terenkripsi (OLE2/CDFV2). xlsx normal diawali ``PK\\x03\\x04``."""
+def _ole2_kind(path):
+    """Klasifikasi file ber-magic OLE2 (xlsx normal diawali ``PK\\x03\\x04``).
+
+    -> 'encrypted' (ada stream EncryptionInfo/EncryptedPackage),
+       'biff'      (stream Workbook/Book tanpa enkripsi = .xls lawas),
+       'unknown'   (OLE2 tapi olefile gagal membacanya — konservatif),
+       None        (bukan OLE2).
+    """
     try:
         with open(path, "rb") as f:
             head = f.read(8)
     except OSError:
-        return False
-    return head == _OLE2_MAGIC
+        return None
+    if head != _OLE2_MAGIC:
+        return None
+    try:
+        import olefile
+
+        with olefile.OleFileIO(path) as ole:
+            if ole.exists("EncryptionInfo") or ole.exists("EncryptedPackage"):
+                return "encrypted"
+            if ole.exists("Workbook") or ole.exists("Book"):
+                return "biff"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def is_encrypted_xlsx(path):
+    """True bila `path` adalah xlsx terenkripsi. .xls BIFF lawas juga ber-magic
+    OLE2 tapi BUKAN terenkripsi — dulu diminta password lalu buntu \"Password
+    salah\". OLE2 yang tak terbaca olefile tetap dianggap terenkripsi
+    (konservatif, perilaku lama)."""
+    return _ole2_kind(path) in ("encrypted", "unknown")
 
 
 def _decrypt_to_temp(path, password):
@@ -110,6 +136,10 @@ def ingest(parser_key, file_path, recon_date=None, account=None, flow="", user=N
     parser = PARSERS[parser_key]()
 
     parse_path, tmp_path = file_path, None
+    if _ole2_kind(file_path) == "biff":
+        raise ValueError(
+            "File .xls format lama tidak didukung — buka di Excel lalu Save As .xlsx"
+        )
     if is_encrypted_xlsx(file_path):
         if not password:
             raise ValueError("File terenkripsi — butuh password untuk membukanya.")
