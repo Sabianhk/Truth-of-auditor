@@ -598,3 +598,71 @@ class RetroSusulanTests(_Base):
         self.assertEqual(r.run.batch, b28)
         p0.refresh_from_db()
         self.assertEqual(p0.consumed_by_batch, b28)
+
+
+class RetroWindowAsalTests(_Base):
+    """W7-1: paritas carried utk baris SUSULAN — window matching DAN keputusan
+    menunggu/kadaluarsa memakai toleransi batch ASAL (home), bukan profil
+    run hari ini. Tanpa ini panel susulan D-2 milik home window 3 ditolak
+    match uang D+2 oleh run profil window 1 lalu dikonsumsi kadaluarsa."""
+
+    def _longgar3(self):
+        return ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+
+    def _home27(self, tol):
+        """Batch 27 rapi (pasangan cocok, tanpa carry) dgn toleransi `tol`."""
+        self._tx(self.panel, "depo", "50000", "50000", "D1", "p1", username="budi")
+        self._tx(self.bank, "depo", "50000", "50000", "", "k1", username="budi")
+        return run_batch(self.lbs, tol, recon_date=date(2026, 6, 27))
+
+    def test_susulan_settle_pakai_window_home(self):
+        # Home 27 window 3; panel 27 susulan muncul di run 29 (profil window 1);
+        # uangnya D+2 dari tanggal panel → dalam window HOME → harus settle.
+        b27 = self._home27(self._longgar3())
+        p2 = self._tx(self.panel, "depo", "60000", "60000", "D2", "p2",
+                      username="andi", dt=datetime(2026, 6, 27, 22, 0))
+        k2 = self._tx(self.bank, "depo", "60000", "60000", "", "k2",
+                      username="andi", dt=datetime(2026, 6, 29, 1, 0))
+        b29 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(left=p2)
+        self.assertEqual(r.run.batch, b27)          # hasil milik batch asal
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.right, k2)
+        p2.refresh_from_db()
+        k2.refresh_from_db()
+        self.assertEqual(p2.consumed_by_batch, b27)  # baris 27 pulang ke home
+        self.assertEqual(k2.consumed_by_batch, b29)  # uang tgl 29 milik batch 29
+
+    def test_susulan_tanpa_uang_menunggu_pakai_window_home(self):
+        # Home 27 window 3, uang belum ada; run 29 profil window 1 → deadline
+        # dinilai dari window HOME (27+3 >= 30) → masih menunggu, TIDAK
+        # dikonsumsi kadaluarsa.
+        b27 = self._home27(self._longgar3())
+        p2 = self._tx(self.panel, "depo", "60000", "60000", "D2", "p2",
+                      username="andi", dt=datetime(2026, 6, 27, 22, 0))
+        self._tx(self.bank, "depo", "90000", "90000", "", "k9",
+                 username="rudi", dt=datetime(2026, 6, 29, 10, 0))
+        run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(left=p2)
+        self.assertEqual(r.run.batch, b27)
+        self.assertEqual(r.reason_code, "no_money")
+        p2.refresh_from_db()
+        self.assertIsNone(p2.consumed_by_batch)  # masih dalam window home
+
+    def test_profil_longgar_hari_ini_tak_memperpanjang_window_susulan(self):
+        # Arah sebaliknya: home 27 window 1; run 29 profil window 3; uang D+2
+        # → di LUAR window home → tidak settle, baris kadaluarsa ke home.
+        b27 = self._home27(self.tol)
+        p2 = self._tx(self.panel, "depo", "60000", "60000", "D2", "p2",
+                      username="andi", dt=datetime(2026, 6, 27, 22, 0))
+        k2 = self._tx(self.bank, "depo", "60000", "60000", "", "k2",
+                      username="andi", dt=datetime(2026, 6, 29, 1, 0))
+        run_batch(self.lbs, self._longgar3(), recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(left=p2)
+        self.assertEqual(r.run.batch, b27)
+        self.assertEqual(r.reason_code, "no_money")
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
+        p2.refresh_from_db()
+        self.assertEqual(p2.consumed_by_batch, b27)  # kadaluarsa ke home

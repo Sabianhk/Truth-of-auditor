@@ -789,7 +789,9 @@ def _retro_homes(toko, recon_date, date_from, date_to, include, exclude_ids=None
     dates = {dt.date() for _, dt in rows if dt}
     homes = {
         b.recon_date: b
-        for b in ReconBatch.objects.filter(toko=toko, recon_date__in=dates)
+        for b in ReconBatch.objects.filter(
+            toko=toko, recon_date__in=dates
+        ).select_related("tolerance")  # W7-1: window home dibaca per baris susulan
     }
     return {i: homes[dt.date()] for i, dt in rows if dt and dt.date() in homes}
 
@@ -1198,6 +1200,16 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         _retro_homes(toko, recon_date, date_from, date_to, include, exclude_ids=set(carried))
         if recon_date else {}
     )
+    # W7-1: paritas carried utk baris SUSULAN — window per baris = toleransi
+    # batch ASALnya (kontrak T+n hari baris itu lahir), bukan profil run hari
+    # ini. Masuk ke peta yang sama yang mengalir ke matcher (kandidat), dan
+    # dipakai lagi di keputusan menunggu/kadaluarsa di bawah. Id uang ikut
+    # masuk peta tapi tak berefek: kandidat() hanya melihat id sisi kiri.
+    carried_windows.update({
+        tx_id: (home.tolerance.date_window_days if home.tolerance_id
+                else tolerance.date_window_days)
+        for tx_id, home in retro.items()
+    })
     runs = [
         run_match(rel, tolerance, date_from, date_to, user=user, toko=toko, batch=batch, include=include,
                   carried=carried, retro=retro, carried_windows=carried_windows)
@@ -1277,10 +1289,12 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
             }
             for t in Transaction.objects.filter(id__in=retro).select_related("source_type"):
                 d = t.occurred_at.date() if t.occurred_at else None
+                # W7-1: deadline menunggu/kadaluarsa baris susulan = window
+                # batch ASALnya (paritas carried W1-4), bukan profil hari ini.
                 if (
                     t.source_type.key == "panel"
                     and t.id not in retro_matched_money
-                    and _can_still_settle(d, recon_date, window)
+                    and _can_still_settle(d, recon_date, carried_windows.get(t.id, window))
                 ):
                     retro_waiting.add(t.id)
                 else:
