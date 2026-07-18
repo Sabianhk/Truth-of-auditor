@@ -1,10 +1,15 @@
-"""Test deteksi & guard file terenkripsi (Mandiri e-statement) di jalur ingest."""
+"""Test deteksi & guard file terenkripsi (Mandiri e-statement) di jalur ingest,
+plus parsing sel tanggal bertipe datetime."""
+import os
 import tempfile
+from datetime import date, datetime
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
+from openpyxl import Workbook
 
 from sources import services
+from sources.parsers.banks import MandiriParser
 
 # OLE2/CDFV2 compound-file header — penanda xlsx terenkripsi.
 _OLE2_MAGIC = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
@@ -101,3 +106,50 @@ class IngestEncryptedGuardTests(TestCase):
             with self.assertRaises(ValueError) as cm:
                 services.ingest("dummy", path, password="")
         self.assertIn("password", str(cm.exception).lower())
+
+
+def _mandiri_xlsx_typed(tanggal, baris_jam=None):
+    """e-Statement minimal dgn sel Tanggal BERTIPE (datetime/date), bukan string."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["No", "Tanggal", "Keterangan", "Dana Masuk (IDR)",
+               "Dana Keluar (IDR)", "Saldo (IDR)"])
+    ws.append([1, tanggal, "Transfer ke BANK MANDIRI BUDI", "", "100.000,00",
+               "2.004.500,00"])
+    if baris_jam is not None:
+        ws.append(["", baris_jam, "lanjutan keterangan", "", "", ""])
+    fd, path = tempfile.mkstemp(suffix=".xlsx")
+    os.close(fd)
+    wb.save(path)
+    return path
+
+
+class MandiriTypedDateTests(SimpleTestCase):
+    """Bug: openpyxl bisa memberi sel Tanggal sbg datetime object — str(datetime)
+    + " " + jam gagal diparse -> occurred_at None tapi baris tetap tersimpan
+    (lolos dari window matching secara senyap)."""
+
+    def _parse(self, tanggal, baris_jam=None):
+        path = _mandiri_xlsx_typed(tanggal, baris_jam)
+        try:
+            return MandiriParser().parse(path)
+        finally:
+            os.remove(path)
+
+    def test_tanggal_datetime_dengan_baris_jam(self):
+        rows = self._parse(datetime(2026, 6, 27), "10:11 WIB")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["occurred_at"], datetime(2026, 6, 27, 10, 11))
+        self.assertEqual(rows[0]["posted_date"], date(2026, 6, 27))
+
+    def test_tanggal_datetime_tanpa_baris_jam(self):
+        rows = self._parse(datetime(2026, 6, 27, 8, 30))
+        self.assertEqual(rows[0]["occurred_at"], datetime(2026, 6, 27, 8, 30))
+
+    def test_tanggal_date_polos(self):
+        rows = self._parse(date(2026, 6, 27))
+        self.assertEqual(rows[0]["occurred_at"], datetime(2026, 6, 27, 0, 0))
+
+    def test_tanggal_string_tetap_jalan(self):
+        rows = self._parse("27 Jun 2026", "10:11 WIB")
+        self.assertEqual(rows[0]["occurred_at"], datetime(2026, 6, 27, 10, 11))

@@ -6,6 +6,7 @@
   angka format ID (1.000,00).
 """
 import re
+from datetime import date, datetime
 from decimal import Decimal
 
 import openpyxl
@@ -308,7 +309,17 @@ class MandiriParser(BaseParser):
                         ket = f"{ket} {nket}".strip()
                     i += 1
 
-            occurred = parse_dt(f"{datestr} {timestr}".strip(), dayfirst=True)
+            # Sel Tanggal bisa BERTIPE (datetime/date dari openpyxl) — pakai
+            # langsung + combine dgn baris jam. Jalur lama (str(datetime) +
+            # " " + jam -> dateparser) kebetulan selamat karena dateutil
+            # memenangkan waktu terakhir, tapi itu quirk tak terdokumentasi
+            # dan versi dateutil tidak dipin — jangan bergantung padanya.
+            if isinstance(tgl, (datetime, date)):
+                base = tgl if isinstance(tgl, datetime) else datetime(tgl.year, tgl.month, tgl.day)
+                jam = parse_dt(timestr) if timestr else None
+                occurred = datetime.combine(base.date(), jam.time()) if jam else base
+            else:
+                occurred = parse_dt(f"{datestr} {timestr}".strip(), dayfirst=True)
             money = masuk - keluar
             row = {
                 "source_type": "bank",
