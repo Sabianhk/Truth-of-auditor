@@ -991,7 +991,7 @@ def _consume_scope(toko, date_from, date_to, include):
 
 @db_tx.atomic
 def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, include=None,
-              recon_date=None):
+              recon_date=None, consume_floor=None):
     """Atomic: kegagalan di tengah run me-rollback SEMUANYA (termasuk baris batch),
     sehingga tanggal harian tidak terblokir constraint unik oleh batch yatim."""
     # Serialisasi PER TOKO: dua run konkuren (meski beda tanggal) membaca pool
@@ -1051,8 +1051,29 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
     resolved = _apply_late_settlements(batch, late_pairs)
     retro_results = [r for run in runs for r in getattr(run, "retro_results", [])]
     retro_homes = _writeback_retro(batch, retro, retro_results, tolerance, user)
+    # SEMUA uang yang terpakai pasangan hari ini (termasuk yang hasilnya milik
+    # batch lain via flip/susulan) — dipakai konsumsi (B1/B2 + consume_floor).
+    used_rights = set()
+    for r_ in runs:
+        used_rights |= getattr(r_, "used_right_ids", set())
+    # W1-2 — celah lo-widening: date_from bisa dilebarkan run_batches_auto ke
+    # tanggal baris carried terawal. Uang TAK BERPASANGAN bertanggal < consume_floor
+    # (= tanggal panel batch ini) tidak boleh ikut dikonsumsi tanpa MatchResult —
+    # biarkan aktif menunggu panel tanggalnya diupload. Uang di celah yang
+    # BERPASANGAN (settle carried / susulan) tetap dikonsumsi seperti biasa.
+    consume_floor = _as_date(consume_floor)
+    pre_floor_orphans = set()
+    if consume_floor:
+        pre_floor_orphans = set(
+            _consume_scope(toko, date_from, date_to, include)
+            .filter(source_type__key__in=_included_money_sources(include),
+                    occurred_at__date__lt=consume_floor)
+            .exclude(id__in=used_rights)
+            .exclude(id__in=set(retro))
+            .values_list("id", flat=True)
+        )
     summary = _aggregate_batch(toko, date_from, date_to, runs, skipped, include=include,
-                               exclude_tx_ids=set(carried) | set(retro))
+                               exclude_tx_ids=set(carried) | set(retro) | pre_floor_orphans)
     if recon_date:
         summary["late_settlement"] = _late_settlement_summary(resolved)
         summary["retro"] = {"count": len(retro)}
@@ -1120,9 +1141,6 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         # B1 — carry-over sisi UANG: baris uang bertanggal > recon_date yang tidak
         # menjadi pasangan hasil mana pun hari ini tetap AKTIF (milik run tanggalnya
         # sendiri besok). Uang lintas-hari yang BERPASANGAN tetap dikonsumsi.
-        used_rights = set()
-        for r_ in runs:
-            used_rights |= getattr(r_, "used_right_ids", set())
         money_keys = _included_money_sources(include)
         cross_money = set(
             _consume_scope(toko, date_from, date_to, include)
@@ -1131,7 +1149,8 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
             .values_list("id", flat=True)
         )
         _consume_scope(toko, date_from, date_to, include)\
-            .exclude(id__in=still_waiting | cross_money).update(consumed_by_batch=batch)
+            .exclude(id__in=still_waiting | cross_money | pre_floor_orphans)\
+            .update(consumed_by_batch=batch)
 
         # B2 — uang tanpa pasangan: klasifikasi a/b/c/d; b & d dicatat sebagai
         # hasil no_panel (bisa ditinjau/di-flag), a & c cukup dihitung.
@@ -1180,7 +1199,8 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
                 summary["buckets"]["tidak_cocok"] += len(new_results)
             summary["unmatched_money"] = stats
     else:
-        _consume_scope(toko, date_from, date_to, include).update(consumed_by_batch=batch)
+        _consume_scope(toko, date_from, date_to, include)\
+            .exclude(id__in=pre_floor_orphans).update(consumed_by_batch=batch)
     batch.summary = summary
     batch.save(update_fields=["summary"])
     return batch
@@ -1317,9 +1337,11 @@ def run_batches_auto(toko, tolerance=None, date_from=None, date_to=None, user=No
             skipped_existing.append({"date": d, "batch_id": existing.id})
             continue
         try:
+            # consume_floor=d: uang tak berpasangan di celah [lo..d) yang panelnya
+            # belum diupload TIDAK dikonsumsi (tetap aktif menunggu panel tanggalnya).
             batch = run_batch(
                 toko, tolerance, date_from=lo, date_to=d,
-                user=user, include=include, recon_date=d,
+                user=user, include=include, recon_date=d, consume_floor=d,
             )
             batches.append(batch)
         except Exception as e:  # noqa: BLE001 - kumpulkan kegagalan per tanggal, lanjut

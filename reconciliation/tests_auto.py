@@ -210,3 +210,64 @@ class VerifyAnchorTests(_Base):
         self._hari(self.panel, "depo", "60000", "60000", "D2", "p2", 29, username="andi")
         self._hari(self.panel, "depo", "50000", "50000", "D1", "p1", 27, username="budi")
         self.assertEqual(_panel_dates(self.lbs), [date(2026, 6, 27), date(2026, 6, 29)])
+
+
+class ConsumeFloorTests(_Base):
+    """W1-2: celah lo-widening — run_batches_auto melebarkan date_from ke tanggal
+    baris carried terawal; uang TAK BERPASANGAN di celah [lo..tanggal panel batch)
+    yang panelnya belum diupload tidak boleh ikut terkonsumsi tanpa MatchResult
+    (harus tetap aktif menunggu panel tanggalnya). Uang di celah yang BERPASANGAN
+    (settle carried) tetap dikonsumsi seperti biasa."""
+
+    def _skenario(self):
+        """Batch 22 (window 2) meninggalkan carried panel-22. Lalu muncul:
+        uang 23 (settle si carried), uang 24 ORPHAN (panelnya belum ada),
+        dan panel+uang 27. Auto-run memproses tanggal 27 dengan lo=22."""
+        longgar2 = ToleranceProfile.objects.get_or_create(
+            name="Longgar2", defaults={"date_window_days": 2}
+        )[0]
+        p22 = self._hari(self.panel, "depo", "50000", "50000", "D1", "p1", 22,
+                         jam=21, username="budi")
+        self._hari(self.bank, "depo", "70000", "70000", "", "k0", 22, username="siti")
+        b22 = run_batch(self.lbs, longgar2, recon_date=date(2026, 6, 22))
+        k23 = self._hari(self.bank, "depo", "50000", "50000", "", "k23", 23,
+                         jam=1, username="budi")   # settle carried p22
+        k24 = self._hari(self.bank, "depo", "90000", "90000", "", "k24", 24,
+                         username="rudi")          # orphan — panel 24 belum diupload
+        self._hari(self.panel, "depo", "60000", "60000", "D2", "p27", 27, username="andi")
+        self._hari(self.bank, "depo", "60000", "60000", "", "k27", 27, username="andi")
+        return longgar2, p22, b22, k23, k24
+
+    def test_uang_orphan_di_celah_tidak_dikonsumsi(self):
+        longgar2, p22, b22, k23, k24 = self._skenario()
+        res = run_batches_auto(self.lbs, longgar2)
+        self.assertTrue(res["ok"], res["violations"])
+        b27 = res["batches"][0]
+        # Carried p22 settle oleh uang 23 → uangnya TETAP dikonsumsi (berpasangan).
+        r = MatchResult.objects.get(run__batch=b22, left=p22)
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.right, k23)
+        k23.refresh_from_db()
+        self.assertEqual(k23.consumed_by_batch, b27)
+        # Orphan 24: TIDAK dikonsumsi (menunggu panel 24), tanpa MatchResult.
+        k24.refresh_from_db()
+        self.assertIsNone(k24.consumed_by_batch)
+        self.assertFalse(
+            MatchResult.objects.filter(right=k24).exists()
+        )
+
+    def test_orphan_di_celah_sembuh_saat_panelnya_datang(self):
+        longgar2, p22, b22, k23, k24 = self._skenario()
+        run_batches_auto(self.lbs, longgar2)
+        # Panel 24 akhirnya diupload → auto-run berikutnya membuat batch 24
+        # dan uang orphan-nya match normal.
+        p24 = self._hari(self.panel, "depo", "90000", "90000", "D3", "p24", 24,
+                         username="rudi")
+        res = run_batches_auto(self.lbs, longgar2)
+        self.assertTrue(res["ok"], res["violations"])
+        self.assertEqual([b.recon_date for b in res["batches"]], [date(2026, 6, 24)])
+        r = MatchResult.objects.get(left=p24)
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.right, k24)
+        k24.refresh_from_db()
+        self.assertEqual(k24.consumed_by_batch, res["batches"][0])
