@@ -285,3 +285,36 @@ class BrivaPhoneExtractionTests(TestCase):
         # Referensi ESB dsb. tetap ikut (perilaku lama, di luar span BRIVA).
         phones = self._phones("BRIVA30135083144889247 ESB:NBMB:0200200P:174837810133")
         self.assertIn("174837810133", phones)
+
+
+class MoneyPhonesAngkaUangTests(TestCase):
+    """W1-8: _money_phones tidak boleh menelan angka UANG — saldo/nominal
+    ≥ Rp100jt menghasilkan deret ≥9 digit yang lolos jadi 'nomor HP' skor 100."""
+
+    def _phones(self, raw, cp=""):
+        from types import SimpleNamespace
+
+        from reconciliation.engine import _money_phones
+        return _money_phones(SimpleNamespace(raw=raw, counterparty=cp))
+
+    def test_key_saldo_tidak_ikut_discan(self):
+        phones = self._phones(
+            {"Saldo": "8123456789.00", "Keterangan": "TRSF DANA 081298765432"}
+        )
+        self.assertEqual(phones, {"81298765432"})
+
+    def test_angka_desimal_uang_di_teks_bebas_dibuang(self):
+        phones = self._phones(
+            {"Keterangan": "bayar 8123456789.00 utk 081298765432"}
+        )
+        self.assertEqual(phones, {"81298765432"})
+
+    def test_variasi_key_uang_terblokir(self):
+        for key in ("Balance", "AMOUNT", "nominal_tx", "Jumlah", "credit",
+                    "Debit", "MutasiDebet", "fee_admin", "Total", "harga"):
+            phones = self._phones({key: "9876543210", "ket": "HP 081298765432"})
+            self.assertEqual(phones, {"81298765432"}, key)
+
+    def test_counterparty_tetap_ikut(self):
+        phones = self._phones({}, cp="DANA 081298765432")
+        self.assertEqual(phones, {"81298765432"})

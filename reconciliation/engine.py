@@ -61,15 +61,29 @@ def _panel_phone(t):
     return digits.lstrip("0").removeprefix("62").lstrip("0")
 
 
+_MONEY_KEY_RE = re.compile(
+    r"saldo|balance|amount|nominal|jumlah|credit|debit|mutasi|fee|total|harga",
+    re.IGNORECASE,
+)
+# Angka uang berformat desimal ('81234567.00') di teks bebas — buang sebelum
+# scan deret digit (saldo/nominal ≥Rp100jt = deret ≥9 digit → "nomor HP" palsu).
+_MONEY_DECIMAL_RE = re.compile(r"\d+[.,]\d{1,2}(?=\s|$)")
+
+
 def _money_phones(t):
     """Deret digit (≥9) di baris uang — mutasi VA e-wallet (FTFVA/DANA, GOPAY
-    TOPUP, dst) menaruh nomor HP/VA tujuan di teks keterangan."""
-    text = " ".join(str(v) for v in (t.raw or {}).values())
+    TOPUP, dst) menaruh nomor HP/VA tujuan di teks keterangan.
+    W1-8: key raw berisi UANG (saldo/nominal/fee dst) tidak ikut di-scan, dan
+    pola angka desimal uang dibuang — angka uang bukan nomor HP."""
+    text = " ".join(
+        str(v) for k, v in (t.raw or {}).items() if not _MONEY_KEY_RE.search(str(k))
+    )
     out = set()
     joined = text + " " + (t.counterparty or "")
     # Span BRIVA diganti nomor bersihnya SEBELUM scan deret digit: nomor ikut
     # terekstrak DAN deret tercemar kode (mis. '301350831448892') hilang.
     joined = _BRIVA_RE.sub(lambda m: f" {m.group(1)} ", joined)
+    joined = _MONEY_DECIMAL_RE.sub(" ", joined)
     for run in _DIGIT_RUN_RE.findall(joined):
         norm = run.lstrip("0").removeprefix("62").lstrip("0")
         if len(norm) >= 9:
