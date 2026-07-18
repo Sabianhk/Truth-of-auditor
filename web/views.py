@@ -662,6 +662,10 @@ def transactions(request):
 
 
 def _export_transactions(qs, active):
+    """Ekspor xlsx hemat memori (W4-8): iterasi qs per chunk 2000 — dulu
+    `list(qs)` 100rb baris + satu `right_id__in` 100rb id sekaligus. Lookup
+    pasangan panel dilakukan per chunk (hasil per right_id identik: semua
+    MatchResult utk id chunk itu tetap dibaca lengkap)."""
     import io
     from datetime import datetime as _dt
 
@@ -669,19 +673,23 @@ def _export_transactions(qs, active):
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import Font
 
-    rows = list(qs)
-    money_ids = [t.id for t in rows if t.source_type.key in ("bank", "gateway")]
-    best = {}
-    if money_ids:
-        results = (
-            MatchResult.objects.filter(right_id__in=money_ids, left__isnull=False)
-            .exclude(bucket=MatchResult.Bucket.TIDAK)
-            .select_related("left")
-        )
-        for r in results:
-            rank = (r.bucket == MatchResult.Bucket.COCOK, r.score or 0, r.run_id, r.id)
-            if r.right_id not in best or rank > best[r.right_id][0]:
-                best[r.right_id] = (rank, r.left)
+    _CHUNK = 2000
+
+    def _pasangan(rows):
+        """right_id → baris panel pasangan terbaik utk baris uang di `rows`."""
+        money_ids = [t.id for t in rows if t.source_type.key in ("bank", "gateway")]
+        best = {}
+        if money_ids:
+            results = (
+                MatchResult.objects.filter(right_id__in=money_ids, left__isnull=False)
+                .exclude(bucket=MatchResult.Bucket.TIDAK)
+                .select_related("left")
+            )
+            for r in results:
+                rank = (r.bucket == MatchResult.Bucket.COCOK, r.score or 0, r.run_id, r.id)
+                if r.right_id not in best or rank > best[r.right_id][0]:
+                    best[r.right_id] = (rank, r.left)
+        return best
 
     wb = Workbook(write_only=True)
     ws = wb.create_sheet("Transaksi")
@@ -696,25 +704,37 @@ def _export_transactions(qs, active):
         "Waktu", "Sumber", "Jenis", "Nominal", "Δ Uang", "Ticket",
         "Username", "Nama Lengkap", "Nama di Bank",
     ]])
-    for t in rows:
-        mp = best.get(t.id, (None, None))[1]
-        is_money = t.source_type.key in ("bank", "gateway")
-        ticket = t.ticket_no or (f"≈ {mp.ticket_no}" if mp and mp.ticket_no else "")
-        username = t.username or (f"≈ {mp.username}" if mp and mp.username else "")
-        if is_money:
-            nama = f"≈ {mp.counterparty}" if mp and mp.counterparty else ""
-        else:
-            nama = t.counterparty or ""
-        # String pihak ketiga dibungkus xlsx_safe (anti injeksi formula Excel).
-        ws.append([
-            t.occurred_at.strftime("%d/%m/%Y %H:%M") if t.occurred_at else "",
-            t.source_label,
-            t.get_jenis_display(),
-            float(t.amount),
-            float(t.money_delta),
-            xlsx_safe(ticket), xlsx_safe(username), xlsx_safe(nama),
-            xlsx_safe(t.counterparty or ""),
-        ])
+
+    def _tulis(rows):
+        best = _pasangan(rows)
+        for t in rows:
+            mp = best.get(t.id, (None, None))[1]
+            is_money = t.source_type.key in ("bank", "gateway")
+            ticket = t.ticket_no or (f"≈ {mp.ticket_no}" if mp and mp.ticket_no else "")
+            username = t.username or (f"≈ {mp.username}" if mp and mp.username else "")
+            if is_money:
+                nama = f"≈ {mp.counterparty}" if mp and mp.counterparty else ""
+            else:
+                nama = t.counterparty or ""
+            # String pihak ketiga dibungkus xlsx_safe (anti injeksi formula Excel).
+            ws.append([
+                t.occurred_at.strftime("%d/%m/%Y %H:%M") if t.occurred_at else "",
+                t.source_label,
+                t.get_jenis_display(),
+                float(t.amount),
+                float(t.money_delta),
+                xlsx_safe(ticket), xlsx_safe(username), xlsx_safe(nama),
+                xlsx_safe(t.counterparty or ""),
+            ])
+
+    buffer_rows = []
+    for t in qs.iterator(chunk_size=_CHUNK):
+        buffer_rows.append(t)
+        if len(buffer_rows) >= _CHUNK:
+            _tulis(buffer_rows)
+            buffer_rows = []
+    if buffer_rows:
+        _tulis(buffer_rows)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
