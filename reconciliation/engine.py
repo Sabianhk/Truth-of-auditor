@@ -3,6 +3,7 @@
 Tiap relasi punya Matcher sendiri (pluggable lewat MATCHERS). Hasil = MatchResult
 dengan bucket cocok / tidak_cocok / perlu_tinjau + reason. Toleransi dari ToleranceProfile.
 """
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
@@ -15,6 +16,8 @@ from sources.parsers.base import clean_name
 from transactions.models import Transaction
 
 from .models import MatchResult, MatchRun, ReconBatch, ToleranceProfile
+
+logger = logging.getLogger(__name__)
 
 MONEY_SOURCES = ["bank", "gateway"]
 
@@ -1344,8 +1347,12 @@ def run_batches_auto(toko, tolerance=None, date_from=None, date_to=None, user=No
                 user=user, include=include, recon_date=d, consume_floor=d,
             )
             batches.append(batch)
-        except Exception as e:  # noqa: BLE001 - kumpulkan kegagalan per tanggal, lanjut
+        except Exception as e:  # noqa: BLE001
+            # STOP di tanggal gagal: tanggal berikutnya bisa mengonsumsi baris
+            # milik tanggal ini (home batch-nya tak ada) — jangan lanjut.
+            logger.exception("run_batches_auto gagal di %s tanggal %s", toko, d)
             errors.append({"date": d, "message": str(e)})
+            break
     return {
         "ok": True, "batches": batches,
         "dates_processed": [b.recon_date for b in batches],

@@ -212,6 +212,49 @@ class VerifyAnchorTests(_Base):
         self.assertEqual(_panel_dates(self.lbs), [date(2026, 6, 27), date(2026, 6, 29)])
 
 
+class AutoSplitStopOnErrorTests(_Base):
+    """W1-3: begitu satu tanggal gagal, loop auto-split BERHENTI — tanggal
+    berikutnya bisa mengonsumsi baris milik tanggal gagal (home batch-nya tak
+    ada), jadi tidak boleh diproses."""
+
+    def _dua_tanggal(self):
+        self._hari(self.panel, "depo", "50000", "50000", "D1", "p1", 27, username="budi")
+        self._hari(self.bank, "depo", "50000", "50000", "", "k1", 27, username="budi")
+        self._hari(self.panel, "depo", "60000", "60000", "D2", "p2", 28, username="andi")
+        self._hari(self.bank, "depo", "60000", "60000", "", "k2", 28, username="andi")
+
+    def test_tanggal_gagal_menghentikan_loop(self):
+        self._dua_tanggal()
+        from unittest import mock
+
+        from reconciliation import engine
+
+        calls = []
+
+        def boom(toko, tolerance, **kw):
+            calls.append(kw.get("recon_date"))
+            raise RuntimeError("boom")
+
+        with mock.patch.object(engine, "run_batch", side_effect=boom):
+            with self.assertLogs("reconciliation.engine", level="ERROR"):
+                res = run_batches_auto(self.lbs, self.tol)
+        # Hanya tanggal PERTAMA yang dicoba; error dilaporkan; tanggal kedua
+        # tidak diproses dan tidak punya batch.
+        self.assertEqual(calls, [date(2026, 6, 27)])
+        self.assertEqual([e["date"] for e in res["errors"]], [date(2026, 6, 27)])
+        self.assertEqual(res["batches"], [])
+        self.assertFalse(
+            ReconBatch.objects.filter(toko=self.lbs, recon_date=date(2026, 6, 28)).exists()
+        )
+
+    def test_tanpa_error_kedua_tanggal_diproses(self):
+        self._dua_tanggal()
+        res = run_batches_auto(self.lbs, self.tol)
+        self.assertEqual(res["errors"], [])
+        self.assertEqual([b.recon_date for b in res["batches"]],
+                         [date(2026, 6, 27), date(2026, 6, 28)])
+
+
 class ConsumeFloorTests(_Base):
     """W1-2: celah lo-widening — run_batches_auto melebarkan date_from ke tanggal
     baris carried terawal; uang TAK BERPASANGAN di celah [lo..tanggal panel batch)
