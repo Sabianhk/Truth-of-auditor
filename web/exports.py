@@ -21,6 +21,25 @@ def safe_name(s):
     return re.sub(r"[^A-Za-z0-9-]+", "_", str(s or "")).strip("_")
 
 
+# Awalan yang Excel/openpyxl baca sebagai formula (injeksi CSV/XLSX).
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def xlsx_safe(value):
+    """Netralkan injeksi formula Excel pada sel string untrusted.
+
+    String pihak ketiga (counterparty/username/description/nama file) yang
+    berawalan =, +, -, @, tab, atau CR dibaca Excel sebagai formula —
+    "=HYPERLINK(...)" di nama pengirim bank bisa dieksekusi saat auditor
+    membuka laporan. Prefix apostrof membuat Excel menampilkannya sebagai
+    teks literal. Nilai non-string (angka/tanggal/None) lolos apa adanya —
+    kolom numerik/tanggal JANGAN dibungkus helper ini.
+    """
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def batch_filename(batch):
     """rekonsiliasi_<toko>_<tanggal>.xlsx — permintaan UAT: tanggal + nama toko."""
     toko = safe_name(batch.toko.name if batch.toko else "toko")
@@ -53,23 +72,25 @@ def results_sheet(wb, run, title, rel_labels):
     qs = run.results.select_related("left", "right", "left__source_type", "right__source_type")
     for r in qs.iterator():
         left, right = r.left, r.right
+        # Sel string dari data pihak ketiga dibungkus xlsx_safe (anti injeksi
+        # formula); kolom numerik/tanggal/label aplikasi tidak.
         d.append([
             r.get_bucket_display(),
-            left.ticket_no if left else "",
+            xlsx_safe(left.ticket_no) if left else "",
             float(left.amount) if left else "",
-            left.username if left else "",
-            left.counterparty if left else "",
-            (left.raw or {}).get("Player Bank", "") if left else "",
-            (left.raw or {}).get("Bank Title", "") if left else "",
-            (left.raw or {}).get("Handler", "") if left else "",
+            xlsx_safe(left.username) if left else "",
+            xlsx_safe(left.counterparty) if left else "",
+            xlsx_safe((left.raw or {}).get("Player Bank", "")) if left else "",
+            xlsx_safe((left.raw or {}).get("Bank Title", "")) if left else "",
+            xlsx_safe((left.raw or {}).get("Handler", "")) if left else "",
             left.occurred_at.strftime("%d/%m %H:%M") if left and left.occurred_at else "",
-            (right.ticket_no or right.counterparty) if right else "",
+            xlsx_safe(right.ticket_no or right.counterparty) if right else "",
             right.source_type.key if right else "",
             float(right.amount) if right else "",
             right.occurred_at.strftime("%d/%m %H:%M") if right and right.occurred_at else "",
             round(r.score or 0),
             reason_label(r.reason_code),
-            r.reason_detail,
+            xlsx_safe(r.reason_detail),
         ])
     return d
 

@@ -39,6 +39,7 @@ from sources.services import PARSERS, ingest, is_encrypted_xlsx
 from transactions.models import Transaction, specific_source_label
 from web.access import is_admin, tokos_for
 from web.biaya import rincian_biaya as hitung_rincian_biaya
+from web.exports import xlsx_safe
 from web.breakdown import bracket_breakdown as hitung_bracket_breakdown, KATEGORI_KANONIK
 from web.forms import GantiPasswordForm
 from web.hutang import hutang_piutang as hitung_hutang_piutang
@@ -665,13 +666,15 @@ def _export_transactions(qs, active):
             nama = f"≈ {mp.counterparty}" if mp and mp.counterparty else ""
         else:
             nama = t.counterparty or ""
+        # String pihak ketiga dibungkus xlsx_safe (anti injeksi formula Excel).
         ws.append([
             t.occurred_at.strftime("%d/%m/%Y %H:%M") if t.occurred_at else "",
             t.source_label,
             t.get_jenis_display(),
             float(t.amount),
             float(t.money_delta),
-            ticket, username, nama, t.counterparty or "",
+            xlsx_safe(ticket), xlsx_safe(username), xlsx_safe(nama),
+            xlsx_safe(t.counterparty or ""),
         ])
     buf = io.BytesIO()
     wb.save(buf)
@@ -940,12 +943,15 @@ def batch_uang(request, pk):
         for c in ws[1]:
             c.font = Font(bold=True)
         for t in rows:
+            # String pihak ketiga (termasuk nama file upload) dibungkus
+            # xlsx_safe — anti injeksi formula Excel.
             ws.append([
                 t.kategori.upper(),
                 t.occurred_at.strftime("%d/%m/%Y %H:%M") if t.occurred_at else "",
                 t.source_type.key,
-                t.upload.original_name if t.upload else "",
-                t.ticket_no, t.username, t.counterparty,
+                xlsx_safe(t.upload.original_name if t.upload else ""),
+                xlsx_safe(t.ticket_no), xlsx_safe(t.username),
+                xlsx_safe(t.counterparty),
                 float(t.money_delta),
             ])
         buf = io.BytesIO()
