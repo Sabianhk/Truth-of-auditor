@@ -18,7 +18,10 @@ class NXPayParser(BaseParser):
         out = []
         for r in rows:
             ticket = str(r.get("Ticket Number", "") or "").strip()
-            if not ticket or "total" in str(r.get("Username", "")).lower():
+            # Footer "Total"/"Grand Total" dideteksi equality/prefix — substring
+            # pernah ikut membuang player asli bernama "totalwin88".
+            uname = str(r.get("Username", "") or "").strip().lower()
+            if not ticket or uname == "total" or uname.startswith(("total ", "grand total")):
                 continue  # skip footer / Grand Total
             amt = abs(parse_decimal(r.get("Amount")))
             occurred = parse_dt(r.get("Date"))  # format US: M/D/YYYY h:m:s AM/PM
