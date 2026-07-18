@@ -168,9 +168,20 @@ def dashboard(request):
         .order_by("-n")
     )
 
-    batches = list(
+    # Batch TERAKHIR dulu (satu baris), lalu hanya batch <= 60 hari dari anchor —
+    # kalender butuh 14 hari & tren 30; memuat SEMUA batch + summary JSON per
+    # render membengkak seiring umur data (W4-7).
+    last = (
         ReconBatch.objects.filter(toko=active, recon_date__isnull=False)
-        .order_by("recon_date")
+        .order_by("-recon_date").first()
+    )
+    today = date_cls.today()
+    anchor = max(last.recon_date, today) if last else today
+    batches = list(
+        ReconBatch.objects.filter(
+            toko=active, recon_date__isnull=False,
+            recon_date__gte=anchor - timedelta(days=60),
+        ).order_by("recon_date")
     )
     by_date = {b.recon_date: b for b in batches}
     total_b = ReconBatch.objects.filter(toko=active).count()
@@ -180,10 +191,6 @@ def dashboard(request):
         dp = abs((s.get("dp") or {}).get("selisih") or 0)
         wd = abs((s.get("wd") or {}).get("selisih") or 0)
         return dp + wd
-
-    # --- kalender 14 hari terakhir (anchor: recon terakhir atau hari ini) ---
-    today = date_cls.today()
-    anchor = max(batches[-1].recon_date, today) if batches else today
     kal = []
     for i in range(13, -1, -1):
         d = anchor - timedelta(days=i)
@@ -215,8 +222,7 @@ def dashboard(request):
             "tot": dp + wd, "htot": round(100 * (dp + wd) / mx),
         })
 
-    # --- kartu status ---
-    last = batches[-1] if batches else None
+    # --- kartu status --- (`last` sudah diambil di atas — batch terakhir sejati)
     last_no = total_b if last else None
     last_sel = selisih(last) if last else 0
     pending = pending_settlement_count(active)
@@ -789,15 +795,17 @@ def reconcile(request):
     bank = request.GET.get("bank", "")
     if bank not in ("bank", "gateway"):
         bank = ""  # nilai tak dikenal → perlakukan sebagai "semua sumber"
-    # Nomor dihitung dari SEMUA batch toko dulu (posisi asli), BARU difilter —
-    # supaya nomor batch tidak berubah saat filter sumber uang aktif.
-    all_batches = list(ReconBatch.objects.filter(toko=active).order_by("-id"))
-    total = len(all_batches)
-    for i, b in enumerate(all_batches):
-        b.no = total - i
+    # Slice 20 langsung di DB (dulu memuat SEMUA batch toko utk diambil 20).
+    # Nomor = posisi asli di antara SEMUA batch toko via batch_no_map — tidak
+    # berubah saat filter sumber uang aktif. Filter completeness di DB (JSON
+    # boolean, nilai dari check_completeness selalu true/false).
+    qs_b = ReconBatch.objects.filter(toko=active)
     if bank:
-        all_batches = [b for b in all_batches if (b.completeness or {}).get(bank)]
-    batches = all_batches[:20]
+        qs_b = qs_b.filter(**{f"completeness__{bank}": True})
+    batches = list(qs_b.order_by("-id")[:20])
+    nos = batch_no_map(active, [b.id for b in batches])
+    for b in batches:
+        b.no = nos.get(b.id)
     comp = check_completeness(active, df, dt)
     comp_keys = ["panel_dp", "panel_wd", "bracket", "bank", "gateway"]
     comp_ready = sum(1 for k in comp_keys if comp.get(k))
@@ -1295,10 +1303,25 @@ def bank_mutations(request):
 
     # Dropdown per-file: upload sumber uang toko aktif, IKUT tombol sumber
     # (Bank → hanya file bank; Gateway QRIS → hanya file gateway).
+    # Berbatas 60 terbaru (W4-7): dropdown + agregat rentang per file jangan
+    # membengkak seiring umur data. File lama via URL (?upload=) tetap bisa —
+    # dicari langsung di upload_qs lalu disisipkan ke daftar.
     upload_qs = Upload.objects.filter(toko=active, source_type__key__in=money_keys)
     if src:
         upload_qs = upload_qs.filter(source_type__key=src)
-    uploads = list(upload_qs.order_by("-id"))
+    uploads = list(upload_qs.order_by("-id")[:60])
+    upload_id = request.GET.get("upload", "")
+    sel_upload = None
+    if upload_id.isdigit():
+        wanted = int(upload_id)
+        # pakai instance DI DAFTAR bila ada (anotasi rentang menempel padanya);
+        # file lama di luar cap dicari di upload_qs (scope toko aktif + src →
+        # RBAC & konsistensi seperti dulu) lalu disisipkan agar ikut dianotasi.
+        sel_upload = next((u for u in uploads if u.id == wanted), None)
+        if sel_upload is None:
+            sel_upload = upload_qs.filter(id=wanted).first()
+            if sel_upload:
+                uploads.append(sel_upload)
     # Rentang isi NYATA per file (satu query agregat, bukan per upload).
     # File ekspor bank sering rolling/tumpang-tindih: baris duplikat di-skip
     # dedup dan tercatat di upload TERDAHULU, jadi file baru bisa berisi
@@ -1330,23 +1353,18 @@ def bank_mutations(request):
         u.n_rows_file = u.rows_parsed + n_link
         u.cover_lo = min((d for d in (lo, dlo) if d), default=None)
         u.cover_hi = max((d for d in (hi, dhi) if d), default=None)
-    upload_id = request.GET.get("upload", "")
-    sel_upload = None
-    if upload_id.isdigit():
-        # cari di daftar ter-scope src → ganti sumber otomatis mereset pilihan file
-        sel_upload = next((u for u in uploads if u.id == int(upload_id)), None)
-        if sel_upload:  # id upload toko lain / sumber lain diabaikan (RBAC + konsistensi)
-            dup_ids = list(sel_upload.duplicate_transactions.values_list("id", flat=True))
-            if dup_ids:
-                # ISI FILE UTUH: baris milik file + baris yang di-skip dedup
-                # (tercatat di upload terdahulu). Urut waktu — posisi asli baris
-                # duplikat di file tak tersimpan, dan ekspor bank kronologis.
-                # id__in list terbatas (≤ isi file), BUKAN OR lintas-join.
-                qs = qs.filter(Q(upload=sel_upload) | Q(id__in=dup_ids)).order_by(
-                    "occurred_at", "id"
-                )
-            else:
-                qs = qs.filter(upload=sel_upload)
+    if sel_upload:  # id upload toko lain / sumber lain diabaikan (RBAC + konsistensi)
+        dup_ids = list(sel_upload.duplicate_transactions.values_list("id", flat=True))
+        if dup_ids:
+            # ISI FILE UTUH: baris milik file + baris yang di-skip dedup
+            # (tercatat di upload terdahulu). Urut waktu — posisi asli baris
+            # duplikat di file tak tersimpan, dan ekspor bank kronologis.
+            # id__in list terbatas (≤ isi file), BUKAN OR lintas-join.
+            qs = qs.filter(Q(upload=sel_upload) | Q(id__in=dup_ids)).order_by(
+                "occurred_at", "id"
+            )
+        else:
+            qs = qs.filter(upload=sel_upload)
 
     page = Paginator(qs, 40).get_page(request.GET.get("page"))
     _resolve_wallet_names(page.object_list, active)
@@ -1641,8 +1659,18 @@ def toko_overview(request):
     if date_to:
         batch_qs = batch_qs.filter(recon_date__lte=date_to)
         tinjau_qs = tinjau_qs.filter(run__batch__recon_date__lte=date_to)
+    # Tanpa filter hanya batch TERAKHIR per toko yang dipakai — jangan memuat
+    # seluruh riwayat + summary JSON semua toko (W4-7): ambil Max(recon_date)
+    # per toko lalu fetch baris-baris puncaknya saja. Dengan filter, seluruh
+    # batch dalam rentang memang dibutuhkan (agregat).
+    if not filtered:
+        peaks = batch_qs.values_list("toko").annotate(m=Max("recon_date"))
+        cond = Q(pk__in=[])
+        for tid, m in peaks:
+            cond |= Q(toko_id=tid, recon_date=m)
+        batch_qs = batch_qs.filter(cond)
     batches_by_toko = {}
-    for b in batch_qs.order_by("recon_date"):
+    for b in batch_qs.order_by("recon_date", "id"):
         batches_by_toko.setdefault(b.toko_id, []).append(b)
     tinjau_by_toko = dict(
         tinjau_qs.values_list("run__batch__toko").annotate(n=Count("id"))
