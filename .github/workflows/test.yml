@@ -1,0 +1,25 @@
+# CI: seluruh suite tes jalan otomatis tiap push/PR.
+# Merah = ada yang rusak SEBELUM kode dipakai auditor — bukan setelahnya.
+name: tes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Samakan dengan runtime Railway (Nixpacks tanpa pin eksplisit;
+          # venv pengembangan = 3.11).
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependensi
+        run: pip install -r requirements.txt
+      - name: Collectstatic (manifest WhiteNoise dibutuhkan template saat tes)
+        run: python manage.py collectstatic --noinput
+      - name: Jalankan tes
+        run: python manage.py test
