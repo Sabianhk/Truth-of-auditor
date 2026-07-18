@@ -179,9 +179,17 @@ def _persist_rows(rows, st, file_path, recon_date, account, flow, user, toko, pr
                 status=Upload.PARSED,
                 uploaded_by=user,
             )
-            existing = set(
-                Transaction.objects.filter(source_type=st, toko=toko).values_list("row_hash", flat=True)
-            )
+            # Dedup: cek HANYA hash yang ada di file ini (chunk 900 — batas
+            # variabel sqlite), bukan memuat SEMUA hash (source_type, toko)
+            # historis (ratusan ribu baris per ingest di prod).
+            existing = set()
+            hashes = list({row["row_hash"] for row in rows})
+            for i in range(0, len(hashes), 900):
+                existing.update(
+                    Transaction.objects.filter(
+                        source_type=st, toko=toko, row_hash__in=hashes[i:i + 900]
+                    ).values_list("row_hash", flat=True)
+                )
             objs, seen, dup, dup_tercatat = [], set(), 0, set()
             for row in rows:
                 rh = row["row_hash"]
