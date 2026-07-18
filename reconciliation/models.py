@@ -11,10 +11,20 @@ class ToleranceProfile(TimeStampedModel):
     date_direction = models.CharField(
         max_length=30,
         default="target_after_base",
-        help_text="target_after_base = sisi uang (Bank) >= sisi kredit (Panel)",
+        help_text=(
+            "BELUM dipakai matcher mana pun — arah tanggal saat ini tertanam "
+            "di engine (sisi uang >= sisi kredit). Mengubah field ini tidak "
+            "berpengaruh."
+        ),
     )
     amount_abs_tol = models.DecimalField(max_digits=18, decimal_places=2, default=0)
-    amount_pct_tol = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    amount_pct_tol = models.DecimalField(
+        max_digits=6, decimal_places=4, default=0,
+        help_text=(
+            "Saat ini hanya dipakai relasi Panel↔Bracket (amount_ok) — "
+            "BELUM dipakai matcher uang (Panel/Bracket↔Bank)."
+        ),
+    )
     fuzzy_threshold = models.IntegerField(default=85)
 
     def __str__(self):

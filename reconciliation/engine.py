@@ -185,7 +185,10 @@ def amount_ok(a, b, tol):
         return True, diff
     if tol.amount_pct_tol and max(a, b) > 0 and (diff / max(a, b)) <= float(tol.amount_pct_tol):
         return True, diff
-    return diff == 0, diff
+    # Sampai sini = di luar semua toleransi → False, titik. (Bentuk lama
+    # `return diff == 0, diff` tak pernah True: diff 0 sudah tertangkap
+    # cabang abs_tol di atas — jangan menyamarkan cabang mati sebagai logika.)
+    return False, diff
 
 
 def _name_score(a, b):
@@ -540,7 +543,10 @@ class _MoneyMatcher:
                 continue
             amt = int(abs(p.money_delta))
             best = None
-            for b, delta in kandidat(p, tol_amt=max(2500, amt // 100)):
+            # Band near-miss: heuristik fee (max(2500, 1%)) ATAU amount_abs_tol
+            # profil — knob yang diisi user harus benar-benar melebarkan band
+            # (Default abs_tol=0 → perilaku tak berubah).
+            for b, delta in kandidat(p, tol_amt=max(2500, amt // 100, int(tol.amount_abs_tol))):
                 s = identity(p, b)
                 if s >= tol.fuzzy_threshold and (best is None or s > best[0]):
                     best = (s, b)
