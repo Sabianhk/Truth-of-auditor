@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from reconciliation.engine import MATCHERS, run_match
 from reconciliation.models import MatchRun, ToleranceProfile
+from sources.models import Toko
 
 
 class Command(BaseCommand):
@@ -16,6 +17,10 @@ class Command(BaseCommand):
         parser.add_argument("--from", dest="dfrom", default=None, help="YYYY-MM-DD (occurred_at)")
         parser.add_argument("--to", dest="dto", default=None, help="YYYY-MM-DD (occurred_at)")
         parser.add_argument("--tolerance", default="Default")
+        parser.add_argument(
+            "--toko", required=True,
+            help="Nama/key/ID Toko (WAJIB — tanpa scope toko pencocokan lintas toko)",
+        )
 
     def handle(self, *args, **o):
         if o["relation"] not in MATCHERS:
@@ -27,7 +32,15 @@ class Command(BaseCommand):
             tol = ToleranceProfile.objects.get(name=o["tolerance"])
         except ToleranceProfile.DoesNotExist:
             raise CommandError(f"ToleranceProfile '{o['tolerance']}' tidak ada")
-        run = run_match(o["relation"], tol, o["dfrom"], o["dto"])
+        ident = str(o["toko"]).strip()
+        toko = (
+            Toko.objects.filter(name__iexact=ident).first()
+            or Toko.objects.filter(key__iexact=ident).first()
+            or (Toko.objects.filter(pk=int(ident)).first() if ident.isdigit() else None)
+        )
+        if toko is None:
+            raise CommandError(f"Toko '{ident}' tidak ditemukan (nama/key/ID)")
+        run = run_match(o["relation"], tol, o["dfrom"], o["dto"], toko=toko)
         s = run.summary
         self.stdout.write(
             self.style.SUCCESS(
