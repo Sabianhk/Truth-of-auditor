@@ -1497,18 +1497,35 @@ def run_batches_auto(toko, tolerance=None, date_from=None, date_to=None, user=No
         if carried_dates:
             lo = min(lo, min(carried_dates))
 
+    # W6-1: floor konsumsi = tanggal panel terawal yang BELUM punya batch,
+    # KONSTAN untuk semua batch di loop — dulu consume_floor=d (tanggal batch
+    # masing-masing) sehingga uang orphan di hari TANPA panel di antara dua
+    # tanggal panel baru (gap-day, mis. panel 27 & 30 + uang nyasar 28)
+    # dilindungi selamanya: tak dikonsumsi, tanpa MatchResult, hilang dari
+    # semua UI. Dengan floor konstan, gap-day antar jangkar baru dikonsumsi +
+    # terklasifikasi no_panel oleh batch pertama yang menjangkaunya. Uang
+    # SEBELUM jangkar baru terawal (termasuk celah setelah tanggal yang sudah
+    # ber-batch — panelnya mungkin baru diupload besok) tetap menunggu.
+    existing_by_date = {
+        b.recon_date: b
+        for b in ReconBatch.objects.filter(toko=toko, recon_date__in=panel_dates)
+    }
+    new_dates = [d for d in panel_dates if d not in existing_by_date]
+    floor = min(new_dates) if new_dates else None
+
     batches, skipped_existing, errors = [], [], []
     for d in panel_dates:  # MENAIK — prasyarat kebenaran carry-over
-        existing = ReconBatch.objects.filter(toko=toko, recon_date=d).first()
+        existing = existing_by_date.get(d)
         if existing:
             skipped_existing.append({"date": d, "batch_id": existing.id})
             continue
         try:
-            # consume_floor=d: uang tak berpasangan di celah [lo..d) yang panelnya
-            # belum diupload TIDAK dikonsumsi (tetap aktif menunggu panel tanggalnya).
+            # consume_floor=floor: uang tak berpasangan di celah [lo..floor) yang
+            # panelnya belum diupload TIDAK dikonsumsi (tetap aktif menunggu
+            # panel tanggalnya); gap-day >= floor dikonsumsi + terklasifikasi.
             batch = run_batch(
                 toko, tolerance, date_from=lo, date_to=d,
-                user=user, include=include, recon_date=d, consume_floor=d,
+                user=user, include=include, recon_date=d, consume_floor=floor,
             )
             batches.append(batch)
         except Exception as e:  # noqa: BLE001

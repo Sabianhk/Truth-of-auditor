@@ -299,6 +299,34 @@ class ConsumeFloorTests(_Base):
             MatchResult.objects.filter(right=k24).exists()
         )
 
+    def test_orphan_gap_day_antar_panel_dikonsumsi_dan_terklasifikasi(self):
+        """W6-1: uang orphan di HARI TANPA PANEL di antara dua tanggal panel
+        (gap-day; hari itu memang tak pernah punya panel) TIDAK dilindungi
+        consume_floor — floor = tanggal panel TERAWAL scope, jadi batch tanggal
+        berikutnya mengonsumsinya dan mencatatnya sebagai no_panel (kategori d),
+        seperti perilaku pra-auto-split. Yang dilindungi hanya uang SEBELUM
+        panel terawal (celah lo-widening asli)."""
+        longgar2 = ToleranceProfile.objects.get_or_create(
+            name="Longgar2", defaults={"date_window_days": 2}
+        )[0]
+        self._hari(self.panel, "depo", "50000", "50000", "D1", "p1", 27, username="budi")
+        self._hari(self.bank, "depo", "50000", "50000", "", "k1", 27, username="budi")
+        self._hari(self.panel, "depo", "80000", "80000", "D2", "p2", 30, username="andi")
+        self._hari(self.bank, "depo", "80000", "80000", "", "k2", 30, username="andi")
+        # Uang nyasar tanggal 28 — hari 28 tak punya panel (dan tak akan punya).
+        nyasar = self._hari(self.bank, "depo", "99000", "99000", "", "k9", 28,
+                            username="zola")
+        res = run_batches_auto(self.lbs, longgar2)
+        self.assertTrue(res["ok"], res["violations"])
+        b30 = res["batches"][-1]
+        self.assertEqual(b30.recon_date, date(2026, 6, 30))
+        nyasar.refresh_from_db()
+        self.assertEqual(nyasar.consumed_by_batch, b30,
+                         "orphan gap-day harus dikonsumsi batch berikutnya")
+        r = MatchResult.objects.get(right=nyasar)
+        self.assertEqual(r.reason_code, "no_panel")
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
+
     def test_orphan_di_celah_sembuh_saat_panelnya_datang(self):
         longgar2, p22, b22, k23, k24 = self._skenario()
         run_batches_auto(self.lbs, longgar2)
