@@ -7,6 +7,7 @@ Net / Trx / Saldo Awal / Saldo Akhir / Selisih Kontrol. Saldo memakai
 dengan breakdown FR (`_saldo_batas`) — kebal acak urutan. Sumber tanpa saldo
 (gateway QRIS, BCA PDF) → saldo & selisih "—".
 """
+from collections import Counter
 from decimal import Decimal
 
 from transactions.models import Transaction
@@ -26,12 +27,21 @@ def rekening_breakdown(toko, tanggal):
         .order_by("occurred_at", "id")
     )
 
-    per = {}  # label → {"items": [...], "is_gateway": bool}
+    # Kunci group = (label, rekening efektif) — BUKAN label saja: dua rekening
+    # BCA pemilik sama punya label identik, digabung = satu rantai saldo palsu
+    # (saldo awal/akhir/kontrol salah). Rekening efektif: account transaksi >
+    # account upload > tanpa rekening (None).
+    per = {}  # (label, account_id) → {"items": [...], "is_gateway": bool, ...}
     count = 0
     for t in rows:
         count += 1
         label = t.source_label_full
-        slot = per.setdefault(label, {"items": [], "is_gateway": False})
+        acc = t.account if t.account_id else (
+            t.upload.account if t.upload_id and t.upload.account_id else None
+        )
+        slot = per.setdefault((label, acc.pk if acc else None),
+                              {"items": [], "is_gateway": False,
+                               "label": label, "acc": acc})
         if t.source_type.key == "gateway":
             slot["is_gateway"] = True
         slug = "admin" if t.jenis == "admin" else ("deposit" if t.money_delta > 0 else "withdrawal")
@@ -39,8 +49,15 @@ def rekening_breakdown(toko, tanggal):
         # (jam, id, delta, balance, slug) — query sudah urut (occurred_at, id).
         slot["items"].append((t.occurred_at, t.id, t.money_delta or NOL, t.balance_after, slug))
 
+    # Dua rekening berbagi label → bedakan tampilan dengan suffix nomor
+    # rekening (label tunggal tetap polos, tampilan lama tak berubah).
+    n_label = Counter(s["label"] for s in per.values())
     accounts = []
-    for label, slot in per.items():
+    for slot in per.values():
+        label = slot["label"]
+        acc = slot["acc"]
+        if n_label[label] > 1 and acc is not None and acc.account_no:
+            label = f"{label} — {acc.account_no}"
         items = slot["items"]
         deposit = withdraw = admin = mutasi = NOL
         trx = 0

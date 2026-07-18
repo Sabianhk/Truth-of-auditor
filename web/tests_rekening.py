@@ -110,6 +110,50 @@ class RekeningAggregatTests(_MoneyData):
         self.assertEqual(data["accounts"][0]["deposit"], Decimal("500000"))
 
 
+class RekeningPerAccountTests(_MoneyData):
+    """W3-5: group per rekening NYATA — (label, account efektif), bukan label
+    saja. Dua rekening BCA pemilik sama (label identik) tidak boleh digabung
+    satu rantai saldo (saldo awal/akhir/kontrol jadi salah)."""
+
+    def _mv_acc(self, account_no, money, saldo, jam):
+        from sources.models import Account
+
+        acc = Account.objects.create(
+            kind="bank", provider="BCA", name="BCA HENDI",
+            account_no=account_no, toko=self.toko,
+        )
+        up = Upload.objects.create(
+            source_type=self.bank, toko=self.toko, provider="BCA",
+            owner_name="HENDI", account=acc,
+        )
+        self._n += 1
+        return Transaction.objects.create(
+            upload=up, source_type=self.bank, toko=self.toko, jenis="depo",
+            amount=abs(Decimal(money)), money_delta=Decimal(money),
+            balance_after=Decimal(saldo),
+            occurred_at=datetime(TGL.year, TGL.month, TGL.day, jam, 0),
+            row_hash=f"acc{self._n}",
+        )
+
+    def test_dua_rekening_label_sama_jadi_dua_baris(self):
+        self._mv_acc("1234567890", "500000", "1500000", 9)   # rek A: awal 1.000.000
+        self._mv_acc("9876543210", "200000", "700000", 10)   # rek B: awal 500.000
+        data = rekening_breakdown(self.toko, TGL)
+        self.assertEqual(len(data["accounts"]), 2,
+                         "dua rekening nyata tidak boleh digabung satu rantai saldo")
+        labels = sorted(a["label"] for a in data["accounts"])
+        self.assertEqual(labels, ["BCA a/n HENDI — 1234567890",
+                                  "BCA a/n HENDI — 9876543210"])
+        for a in data["accounts"]:
+            self.assertEqual(a["selisih"], Decimal("0"), a["label"])
+
+    def test_satu_rekening_label_tetap_polos(self):
+        # Tanpa tabrakan label, tampilan tidak berubah (tanpa suffix nomor).
+        self._mv_acc("1234567890", "500000", "1500000", 9)
+        (acc,) = rekening_breakdown(self.toko, TGL)["accounts"]
+        self.assertEqual(acc["label"], "BCA a/n HENDI")
+
+
 class RekeningViewTests(_MoneyData):
     def setUp(self):
         super().setUp()
