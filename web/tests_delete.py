@@ -1,6 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from django.test import TestCase
 from django.urls import reverse
 
@@ -10,11 +8,11 @@ from transactions.models import Transaction
 User = get_user_model()
 
 
-def _mk_upload(toko, with_file=False):
+def _mk_upload(toko):
+    # Tanpa file fisik: Upload.file memang TIDAK pernah diisi di alur nyata
+    # (ingest hanya menyimpan baris hasil parse, file asli dibuang usai parse).
     st = SourceType.objects.get_or_create(key="panel", defaults={"name": "Panel"})[0]
     up = Upload.objects.create(source_type=st, toko=toko, original_name="f.xlsx")
-    if with_file:
-        up.file.save("f.xlsx", ContentFile(b"data"), save=True)
     return up, st
 
 
@@ -23,11 +21,10 @@ class DeleteUploadTests(TestCase):
         self.lbs = Toko.objects.get(key="lbs")
         User.objects.create_user("adm", password="pw123456", role="admin")
 
-    def test_admin_hapus_upload_beserta_tx_dan_file(self):
+    def test_admin_hapus_upload_beserta_tx(self):
         from datetime import datetime
         from decimal import Decimal
-        up, st = _mk_upload(self.lbs, with_file=True)
-        path = up.file.name
+        up, st = _mk_upload(self.lbs)
         Transaction.objects.create(
             upload=up, source_type=st, toko=self.lbs, jenis="depo",
             amount=Decimal("1"), money_delta=Decimal("1"),
@@ -38,7 +35,6 @@ class DeleteUploadTests(TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertFalse(Upload.objects.filter(pk=up.pk).exists())
         self.assertEqual(Transaction.objects.count(), 0)
-        self.assertFalse(default_storage.exists(path))
 
     def test_auditor_ditolak(self):
         up, _ = _mk_upload(self.lbs)

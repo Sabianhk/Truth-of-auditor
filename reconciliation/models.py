@@ -35,7 +35,9 @@ class MatchRun(TimeStampedModel):
     class Relation(models.TextChoices):
         PANEL_BRACKET = "panel_bracket", "Panel ↔ Bracket"
         PANEL_BANK = "panel_bank", "Panel ↔ Mutasi Bank"
+        # CLI-only (`manage.py match bracket_bank`) — tidak dipakai alur web.
         BRACKET_BANK = "bracket_bank", "Bracket ↔ Mutasi Bank"
+        # Belum ada matcher-nya sama sekali (CLI menolak); placeholder rencana.
         SALDO = "saldo", "Rekonsiliasi Saldo"
 
     relation = models.CharField(max_length=20, choices=Relation.choices)

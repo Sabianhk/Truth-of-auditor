@@ -607,6 +607,9 @@ class PanelBankMatcher(_MoneyMatcher):
 
 
 class BracketBankMatcher(_MoneyMatcher):
+    """CLI-only (`manage.py match bracket_bank`) — TIDAK dipakai alur web:
+    run_batch hanya menjalankan PANEL_BRACKET + PANEL_BANK."""
+
     left_key = "bracket"
 
 
@@ -628,6 +631,17 @@ def run_match(relation, tolerance=None, date_from=None, date_to=None, user=None,
     `run.retro_results` untuk ditulis ke batch asalnya oleh run_batch."""
     tolerance = tolerance or ToleranceProfile.objects.get(name="Default")
     matcher = MATCHERS[relation]()
+    # Atomic menyeluruh: exception di tengah matcher me-rollback MatchRun yang
+    # baru dibuat — jangan meninggalkan run yatim tanpa hasil (dipanggil
+    # standalone dari CLI; run_batch punya atomic sendiri, nested aman).
+    with db_tx.atomic():
+        run = _run_match_inner(matcher, relation, tolerance, date_from, date_to,
+                               user, toko, batch, include, carried, retro)
+    return run
+
+
+def _run_match_inner(matcher, relation, tolerance, date_from, date_to,
+                     user, toko, batch, include, carried, retro):
     run = MatchRun.objects.create(
         relation=relation, tolerance=tolerance, date_from=date_from, date_to=date_to,
         created_by=user, batch=batch,

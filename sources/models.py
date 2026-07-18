@@ -103,6 +103,10 @@ class Upload(TimeStampedModel):
     )
     flow = models.CharField(max_length=5, blank=True)
     recon_date = models.DateField(null=True, blank=True, help_text="tanggal rekonsiliasi")
+    # CATATAN: field ini TIDAK pernah diisi — ingest hanya menyimpan baris
+    # hasil parse, file asli dibuang usai parse. Menyimpan file asli sebagai
+    # bukti audit = keputusan produk (butuh volume + kebijakan retensi), bukan
+    # sekadar mengisi field ini.
     file = models.FileField(upload_to="uploads/%Y/%m/")
     original_name = models.CharField(max_length=255, blank=True)
     owner_name = models.CharField(

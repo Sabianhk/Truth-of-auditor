@@ -140,3 +140,22 @@ class PanelBankMatcherTests(TestCase):
         )
         run = run_match("panel_bank", self.tol)
         self.assertEqual(run.summary["cocok"], 1)
+
+
+class RunMatchAtomicTests(TestCase):
+    """W5-8c: exception di tengah matcher tidak boleh meninggalkan MatchRun
+    yatim (run tanpa hasil yang mengotori riwayat & summary)."""
+
+    def test_matcher_raise_tidak_ada_run_tersisa(self):
+        from unittest.mock import patch
+
+        from reconciliation.engine import PanelBankMatcher
+        from reconciliation.models import MatchRun
+
+        tol = ToleranceProfile.objects.get_or_create(
+            name="Default", defaults={"date_window_days": 1, "fuzzy_threshold": 85}
+        )[0]
+        with patch.object(PanelBankMatcher, "match", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                run_match("panel_bank", tol)
+        self.assertEqual(MatchRun.objects.count(), 0)

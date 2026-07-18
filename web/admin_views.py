@@ -316,8 +316,8 @@ def delete_upload(request, pk):
             return redirect("upload")
         n_tx = up.transactions.count()
         toko = up.toko
-        if up.file:
-            up.file.delete(save=False)
+        # Tidak ada file fisik untuk dihapus: Upload.file tak pernah diisi
+        # (ingest hanya menyimpan baris hasil parse, bukan file aslinya).
         up.delete()
         catat(request.user, "hapus_upload", name, toko=toko, upload_pk=pk, n_tx=n_tx)
         messages.success(request, f"{name} dihapus — {n_tx} transaksi ikut terhapus.")
@@ -342,8 +342,6 @@ def bulk_delete_uploads(request):
                 continue
             nama = up.original_name or f"Upload #{up.pk}"
             n_tx += up.transactions.count()
-            if up.file:
-                up.file.delete(save=False)
             up.delete()
             n_file += 1
             terhapus.append(nama)
@@ -397,10 +395,6 @@ def delete_toko(request, pk):
             n_tx = Transaction.objects.filter(toko=t).count()
             n_up = Upload.objects.filter(toko=t).count()
             n_batch = ReconBatch.objects.filter(toko=t).count()
-            # Hapus file fisik tiap upload sebelum baris DB-nya hilang.
-            for up in Upload.objects.filter(toko=t):
-                if up.file:
-                    up.file.delete(save=False)
             # Bongkar dependen PROTECT dulu, baru toko-nya (belt-and-suspenders).
             ReconBatch.objects.filter(toko=t).delete()
             Upload.objects.filter(toko=t).delete()
