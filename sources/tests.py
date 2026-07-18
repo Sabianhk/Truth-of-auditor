@@ -73,6 +73,18 @@ class ExtractTests(SimpleTestCase):
     def test_long_ref_not_mistaken_as_ticket(self):
         self.assertEqual(extract_ticket("F260627206100206205 saja"), "")
 
+    def test_ticket_10_digit(self):
+        # Antisipasi pertumbuhan nomor tiket: 10 digit tak boleh degradasi senyap.
+        self.assertEqual(extract_ticket("Direct Deposit - D1234567890"), "D1234567890")
+
+    def test_ticket_11_digit(self):
+        self.assertEqual(extract_ticket("Direct Withdraw - W12345678901"), "W12345678901")
+
+    def test_12_digit_tetap_reference(self):
+        # >= 12 digit = wilayah reference gateway — jangan tertangkap sbg ticket.
+        self.assertEqual(extract_ticket("D123456789012"), "")
+        self.assertEqual(extract_ref("D123456789012"), "D123456789012")
+
 
 class ParseDtTests(SimpleTestCase):
     def test_iso(self):

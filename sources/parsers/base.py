@@ -17,9 +17,10 @@ from decimal import Decimal, InvalidOperation
 import openpyxl
 from dateutil import parser as dateparser
 
-# Ticket panel: D/W + 6-9 digit (mis. D1757153, W1757092). Sengaja dibatasi agar
-# TIDAK ikut menangkap reference gateway yang panjang (>=12 digit).
-TICKET_RE = re.compile(r"\b([DW]\d{6,9})\b")
+# Ticket panel: D/W + 6-11 digit (mis. D1757153, W1757092; ruang tumbuh sampai
+# 11 digit). Sengaja dibatasi agar TIDAK ikut menangkap reference gateway yang
+# panjang (>=12 digit, lihat REF_RE).
+TICKET_RE = re.compile(r"\b([DW]\d{6,11})\b")
 # Reference gateway: 1 huruf + >=12 digit (mis. F260627206100206205).
 REF_RE = re.compile(r"\b([A-Z]\d{12,})\b")
 # Non-alfabet (angka/simbol) pada nama -> diganti spasi sebelum fuzzy matching.
