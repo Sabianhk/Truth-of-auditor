@@ -9,6 +9,19 @@ from sources.models import SourceType, Upload
 from transactions.models import Transaction
 
 
+class MatchResultIndexTests(SimpleTestCase):
+    """W3-7: MatchResult difilter per bucket/reason_code hampir tiap request
+    (context processor antrean tinjau, _carried_qs, review_queue) — wajib
+    ter-index, bukan seq-scan tabel hasil terbesar."""
+
+    def test_meta_indexes_bucket_dan_reason_code(self):
+        from reconciliation.models import MatchResult
+
+        idx = [tuple(i.fields) for i in MatchResult._meta.indexes]
+        self.assertIn(("bucket",), idx)
+        self.assertIn(("reason_code", "bucket"), idx)
+
+
 class NameScoreTests(SimpleTestCase):
     """Skor nama toleran-truncation: bank sering memotong nama (BCA ~18 karakter)."""
 

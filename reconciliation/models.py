@@ -106,6 +106,15 @@ class MatchResult(TimeStampedModel):
         help_text="Batch yang men-settle hasil tidak_cocok/no_money ini terlambat",
     )
 
+    class Meta:
+        # Difilter per bucket/reason_code hampir tiap request (context
+        # processor antrean tinjau, _carried_qs, review_queue) — tanpa index
+        # = seq-scan tabel hasil terbesar.
+        indexes = [
+            models.Index(fields=["bucket"]),
+            models.Index(fields=["reason_code", "bucket"]),
+        ]
+
     def __str__(self):
         return f"{self.bucket} ({self.reason_code})"
 

@@ -123,3 +123,20 @@ class RiwayatAksiTampilTests(_Base):
         resp = self.client.get(reverse("batch_detail", args=[batch.pk]))
         self.assertContains(resp, "Riwayat aksi")
         self.assertContains(resp, "adm")
+
+    def test_riwayat_terfilter_toko_batch(self):
+        """W3-7: filter riwayat menyertakan toko=batch.toko — index (toko, aksi)
+        AuditLog terpakai; batch_pk toko lain (tabrakan pk) tak ikut tampil."""
+        batch, _run, _r = self._batch_dengan_result()
+        AuditLog.objects.create(
+            user=self.adm, toko=self.lbs, aksi="reconcile",
+            objek="Batch asli", detail={"batch_pk": batch.pk},
+        )
+        toko_lain = Toko.objects.exclude(pk=self.lbs.pk).first()
+        AuditLog.objects.create(
+            user=self.adm, toko=toko_lain, aksi="reconcile",
+            objek="BATCH-TOKO-LAIN", detail={"batch_pk": batch.pk},
+        )
+        resp = self.client.get(reverse("batch_detail", args=[batch.pk]))
+        self.assertContains(resp, "Batch asli")
+        self.assertNotContains(resp, "BATCH-TOKO-LAIN")

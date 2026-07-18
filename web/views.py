@@ -871,8 +871,11 @@ def batch_detail(request, pk):
     bkt = (batch.summary or {}).get("buckets", {})
     claimed = sum(v for v in bkt.values() if isinstance(v, (int, float)))
     is_hollow = claimed > 0 and not MatchResult.objects.filter(run__batch=batch).exists()
+    # toko=batch.toko: index (toko, aksi) AuditLog terpakai (filter JSON
+    # detail__batch_pk saja = seq-scan) + tahan tabrakan pk lintas data.
     riwayat = list(
-        AuditLog.objects.filter(detail__batch_pk=batch.pk).select_related("user")[:20]
+        AuditLog.objects.filter(toko=batch.toko, detail__batch_pk=batch.pk)
+        .select_related("user")[:20]
     )
 
     return render(request, "web/batch_detail.html", {
