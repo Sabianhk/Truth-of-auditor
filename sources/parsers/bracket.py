@@ -75,9 +75,14 @@ class BracketParser(BaseParser):
                 "bank_title": bank_title,
                 "raw": raw,
             }
-            row["row_hash"] = row_hash(
-                "bracket",
-                [r.get("Transaction ID", ""), row["ticket_no"], row["username"], row["amount"]],
-            )
+            # Baris manual ledger (Beban Admin QRIS/Hutang/Piutang, dst): tanpa
+            # Transaction ID DAN tanpa ticket, nominal sama lintas riwayat =
+            # hash identik -> baris kedua dibuang senyap saat ingest. Tambahkan
+            # Tanggal+Jam+Description sebagai pembeda. Baris ber-ID/ticket TETAP
+            # formula lama agar idempotensi data lama terjaga.
+            parts = [r.get("Transaction ID", ""), row["ticket_no"], row["username"], row["amount"]]
+            if not str(r.get("Transaction ID", "") or "").strip() and not row["ticket_no"]:
+                parts += [r.get("Tanggal", ""), r.get("Jam", ""), desc]
+            row["row_hash"] = row_hash("bracket", parts)
             out.append(row)
         return out
