@@ -179,7 +179,13 @@ class BebaskanUangMarkUnmatchedTests(_Base):
         m.refresh_from_db()
         self.assertIsNone(m.consumed_by_batch)
 
-    def test_mark_unmatched_uang_batch_lain_tak_dibebaskan(self):
+    def test_mark_unmatched_uang_batch_lain_ikut_dibebaskan(self):
+        """W6-5c — KONTRAK BERUBAH SADAR dari W1-6c: dulu uang yang dikonsumsi
+        batch LAIN tak disentuh; kini dibebaskan apa pun batch-nya. Kasus retro:
+        hasil ditulis di run batch HOME sedangkan uangnya dikonsumsi batch
+        BERJALAN (provenance tak tersimpan) — guard lama membuat pembebasan
+        mustahil. Aman: pasangan DITOLAK reviewer & summary kedua batch
+        di-refresh."""
         other = ReconBatch.objects.create(toko=self.toko, tolerance=self.tol)
         p, m = self._panel(), self._bank()
         m.consumed_by_batch = other
@@ -188,7 +194,95 @@ class BebaskanUangMarkUnmatchedTests(_Base):
         self.client.post(reverse("review", args=[r.pk]),
                          {"action": "mark_unmatched"})
         m.refresh_from_db()
-        self.assertEqual(m.consumed_by_batch, other)
+        self.assertIsNone(m.consumed_by_batch)
+        # Summary batch hasil DAN batch yang tadinya mengonsumsi ikut segar.
+        other.refresh_from_db()
+        self.batch.refresh_from_db()
+        self.assertIn("buckets", other.summary)
+        self.assertIn("buckets", self.batch.summary)
+
+
+class TolakCocokSatuSisiTests(_Base):
+    """W6-5a: mark_matched wajib DUA sisi (left DAN right) — hasil no_panel
+    (left None) yang ditandai cocok jadi COCOK hantu yang tak terhitung
+    _matched_money. Tombol 'Tandai Cocok' juga disembunyikan di UI."""
+
+    def _no_panel(self):
+        m = self._bank()
+        return MatchResult.objects.create(
+            run=self.run, bucket=MatchResult.Bucket.TIDAK, left=None, right=m,
+            score=0, reason_code="no_panel",
+        )
+
+    def test_single_mark_matched_tanpa_left_ditolak(self):
+        r = self._no_panel()
+        resp = self.client.post(reverse("review", args=[r.pk]),
+                                {"action": "mark_matched"})
+        self.assertEqual(resp.status_code, 400)
+        r.refresh_from_db()
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
+        self.assertFalse(ReviewAction.objects.filter(result=r).exists())
+
+    def test_bulk_mark_matched_tanpa_left_dilewati(self):
+        r = self._no_panel()
+        resp = self.client.post(
+            reverse("bulk_review", args=[self.run.pk]),
+            {"action": "mark_matched", "result_ids": [str(r.pk)]},
+            follow=True,
+        )
+        r.refresh_from_db()
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
+        self.assertFalse(ReviewAction.objects.filter(result=r).exists())
+        msgs = [str(m) for m in resp.context["messages"]]
+        self.assertTrue(any("dilewati" in m for m in msgs), msgs)
+
+    def test_tombol_cocok_disembunyikan_untuk_hasil_satu_sisi(self):
+        self._no_panel()
+        resp = self.client.get(reverse("run_detail", args=[self.run.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'title="Tandai Cocok"')
+        self.assertContains(resp, 'title="Perlu Ditinjau"')
+
+    def test_tombol_cocok_tampil_untuk_hasil_dua_sisi(self):
+        self._pair(self._panel(), self._bank())
+        resp = self.client.get(reverse("run_detail", args=[self.run.pk]))
+        self.assertContains(resp, 'title="Tandai Cocok"')
+
+
+class ReviewAtomikTests(_Base):
+    """W6-5b: review & bulk_review atomic menyeluruh — gagal di tengah
+    (mis. refresh summary) me-rollback SEMUA mutasi, tak ada hasil setengah
+    tertulis yang menyimpang dari summary."""
+
+    def test_review_gagal_refresh_rollback_semua(self):
+        from unittest.mock import patch
+
+        p, m = self._panel(), self._bank()
+        r = self._pair(p, m)
+        with patch("web.views.refresh_batch_summary",
+                   side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse("review", args=[r.pk]),
+                                 {"action": "mark_matched"})
+        r.refresh_from_db()
+        self.assertEqual(r.bucket, MatchResult.Bucket.TINJAU)  # tak berubah
+        self.assertFalse(ReviewAction.objects.filter(result=r).exists())
+
+    def test_bulk_gagal_refresh_rollback_semua(self):
+        from unittest.mock import patch
+
+        p, m = self._panel(), self._bank()
+        r = self._pair(p, m)
+        with patch("web.views.refresh_batch_summary",
+                   side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("bulk_review", args=[self.run.pk]),
+                    {"action": "mark_matched", "result_ids": [str(r.pk)]},
+                )
+        r.refresh_from_db()
+        self.assertEqual(r.bucket, MatchResult.Bucket.TINJAU)
+        self.assertFalse(ReviewAction.objects.filter(result=r).exists())
 
 
 class PredikatBerpasanganTests(_Base):
