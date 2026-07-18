@@ -297,7 +297,7 @@ class PanelBracketMatcher:
         )
         return list(left), list(right)
 
-    def match(self, run, left, right):
+    def match(self, run, left, right, carried_windows=None):
         tol = run.tolerance
         bidx = {}
         for b in right:
@@ -386,8 +386,9 @@ class _MoneyMatcher:
             return s
         return _name_score(p.counterparty, b.counterparty)
 
-    def match(self, run, left, right):
+    def match(self, run, left, right, carried_windows=None):
         tol = run.tolerance
+        carried_windows = carried_windows or {}
         out, used, matched = [], set(), set()
 
         bidx = defaultdict(list)
@@ -487,7 +488,13 @@ class _MoneyMatcher:
         }
 
         def kandidat(p, *, lo=0, hi=None, tol_amt=0):
-            hi = tol.date_window_days if hi is None else hi
+            if hi is None:
+                # W6-2: window baris CARRIED = window batch ASALnya penuh —
+                # kontrak T+n yang dijanjikan saat baris lahir (konsisten dgn
+                # expiry W1-4 & deadline settlement page), bukan campur/max dgn
+                # profil hari ini. Toleransi NOMINAL & fuzzy tetap profil hari
+                # ini. Baris non-carried memakai window profil run seperti biasa.
+                hi = carried_windows.get(p.id, tol.date_window_days)
             d = p.occurred_at.date() if p.occurred_at else None
             if d is None:
                 return
@@ -621,14 +628,16 @@ MATCHERS = {
 
 
 def run_match(relation, tolerance=None, date_from=None, date_to=None, user=None, toko=None, batch=None, include=None,
-              carried=None, retro=None):
+              carried=None, retro=None, carried_windows=None):
     """`carried` = dict left_id → MatchResult no_money lama (carry-over harian).
     Baris carried ikut pool relasi UANG agar bisa settle terlambat, tapi tidak
     pernah membuat MatchResult baru di run ini; pasangan yang match dikembalikan
     lewat atribut transien `run.late_pairs` untuk di-flip oleh run_batch.
     `retro` = dict tx_id → ReconBatch asal (baris susulan). Baris susulan ikut
     pool biasa, tapi hasil yang ber-anchor padanya dialihkan ke atribut transien
-    `run.retro_results` untuk ditulis ke batch asalnya oleh run_batch."""
+    `run.retro_results` untuk ditulis ke batch asalnya oleh run_batch.
+    `carried_windows` = dict left_id → date_window_days batch ASAL baris carried
+    (W6-2): matcher memakai window asal utk baris itu, bukan window profil ini."""
     tolerance = tolerance or ToleranceProfile.objects.get(name="Default")
     matcher = MATCHERS[relation]()
     # Atomic menyeluruh: exception di tengah matcher me-rollback MatchRun yang
@@ -636,12 +645,14 @@ def run_match(relation, tolerance=None, date_from=None, date_to=None, user=None,
     # standalone dari CLI; run_batch punya atomic sendiri, nested aman).
     with db_tx.atomic():
         run = _run_match_inner(matcher, relation, tolerance, date_from, date_to,
-                               user, toko, batch, include, carried, retro)
+                               user, toko, batch, include, carried, retro,
+                               carried_windows)
     return run
 
 
 def _run_match_inner(matcher, relation, tolerance, date_from, date_to,
-                     user, toko, batch, include, carried, retro):
+                     user, toko, batch, include, carried, retro,
+                     carried_windows=None):
     run = MatchRun.objects.create(
         relation=relation, tolerance=tolerance, date_from=date_from, date_to=date_to,
         created_by=user, batch=batch,
@@ -652,7 +663,7 @@ def _run_match_inner(matcher, relation, tolerance, date_from, date_to,
         # jangan menghasilkan no_bracket/no_panel dobel di batch baru.
         left = [t for t in left if t.id not in carried]
         right = [t for t in right if t.id not in carried]
-    results = matcher.match(run, left, right)
+    results = matcher.match(run, left, right, carried_windows=carried_windows)
     late_pairs, keep = [], results
     if carried and relation != MatchRun.Relation.PANEL_BRACKET:
         keep = []
@@ -821,8 +832,14 @@ def _writeback_retro(batch, retro, retro_results, tolerance, user):
     for (home_pk, relation), (home, rs) in groups.items():
         run = MatchRun.objects.filter(batch=home, relation=relation).order_by("id").first()
         if run is None:
+            # W6-2b: run baru di batch HOME memakai toleransi HOME — expiry &
+            # deadline settlement page dinilai dari run.tolerance/home.tolerance,
+            # jadi toleransi run hari ini akan membuat kontrak window baris
+            # susulan menyimpang dari batch asalnya.
             run = MatchRun.objects.create(
-                relation=relation, tolerance=tolerance, batch=home, created_by=user
+                relation=relation,
+                tolerance=(home.tolerance if home.tolerance_id else tolerance),
+                batch=home, created_by=user,
             )
         note = f"Susulan via run {batch.recon_date}"
         for r in rs:
@@ -1141,6 +1158,15 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         created_by=user, completeness=comp, recon_date=recon_date,
     )
     carried = _carried_results(toko) if recon_date else {}
+    # W6-2: window MATCHING baris carried = window batch ASALnya (kontrak T+n
+    # yang dijanjikan saat baris lahir; sama dgn basis expiry W1-4 dan deadline
+    # web/settlement.py). Tanpa ini carried Longgar di run Ketat menolak uang
+    # sah D+2/D+3, dan carried Ketat di run Longgar settle melewati deadline.
+    carried_windows = {
+        left_id: (r.run.tolerance.date_window_days if r.run.tolerance_id
+                  else tolerance.date_window_days)
+        for left_id, r in carried.items()
+    }
     relations, skipped = [], []
     # PANEL_BRACKET hanya jika bracket ADA, dicentang, DAN ada panel ber-ticket
     # DALAM SCOPE tanggal run (panel tanpa ticket—mis. COR—tak bisa di-join baris
@@ -1174,7 +1200,7 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
     )
     runs = [
         run_match(rel, tolerance, date_from, date_to, user=user, toko=toko, batch=batch, include=include,
-                  carried=carried, retro=retro)
+                  carried=carried, retro=retro, carried_windows=carried_windows)
         for rel in relations
     ]
     late_pairs = [pair for r in runs for pair in getattr(r, "late_pairs", [])]

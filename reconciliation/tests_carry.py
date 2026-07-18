@@ -367,6 +367,86 @@ class ExpiryWindowAsalTests(_Base):
                          [{"tx": p.id, "home": b27.id}])
 
 
+class CarriedWindowAsalTests(_Base):
+    """W6-2: baris carried DICOCOKKAN memakai window batch ASALnya (kontrak T+n
+    yang dijanjikan saat baris lahir — sama dgn deadline settlement page), bukan
+    window profil run hari ini. W1-4 baru membetulkan EXPIRY; matcher masih
+    memakai window hari ini sehingga carried Longgar di run Ketat menolak uang
+    sah, dan carried Ketat di run Longgar settle melewati deadline-nya."""
+
+    def _carried_dgn_window(self, tol):
+        p = self._tx(self.panel, "depo", "50000", "50000", "D1", "p1",
+                     username="budi", dt=datetime(2026, 6, 27, 21, 0))
+        self._tx(self.bank, "depo", "70000", "70000", "", "k1", username="siti")
+        b27 = run_batch(self.lbs, tol, recon_date=date(2026, 6, 27))
+        p.refresh_from_db()
+        self.assertIsNone(p.consumed_by_batch)  # carried
+        return p, b27
+
+    def test_carried_longgar_settle_di_run_profil_ketat(self):
+        longgar3 = ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+        p, b27 = self._carried_dgn_window(longgar3)
+        # Uang tiba D+2 (29) — dalam window ASAL (3), di luar window run hari
+        # ini (Default 1). Kontrak batch asal harus tetap berlaku → settle.
+        uang = self._tx(self.bank, "depo", "50000", "50000", "", "k2",
+                        username="budi", dt=datetime(2026, 6, 29, 10, 0))
+        b29 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(run__batch=b27, left=p)
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)
+        self.assertEqual(r.reason_code, "late_settlement")
+        self.assertEqual(r.right, uang)
+        self.assertEqual(r.resolved_by_batch, b29)
+        p.refresh_from_db()
+        self.assertEqual(p.consumed_by_batch, b27)
+
+    def test_carried_ketat_tak_settle_melewati_window_asal(self):
+        longgar3 = ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+        p, b27 = self._carried_dgn_window(self.tol)  # asal window 1
+        # Uang D+2 — di LUAR window asal (1) walau run hari ini window 3:
+        # tidak boleh dipasangkan; baris kadaluarsa diam-diam ke batch asal.
+        self._tx(self.bank, "depo", "50000", "50000", "", "k2",
+                 username="budi", dt=datetime(2026, 6, 29, 10, 0))
+        b29 = run_batch(self.lbs, longgar3, recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(run__batch=b27, left=p)
+        self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
+        self.assertEqual(r.reason_code, "no_money")  # TIDAK di-flip
+        p.refresh_from_db()
+        self.assertEqual(p.consumed_by_batch, b27)  # kadaluarsa ke home
+        self.assertEqual(b29.summary["late_settlement"]["expired"],
+                         [{"tx": p.id, "home": b27.id}])
+
+    def test_run_baru_di_home_pakai_toleransi_home(self):
+        # W6-2b: _writeback_retro membuat run baru di batch HOME → toleransinya
+        # harus toleransi HOME (expiry/settlement page konsisten), bukan
+        # toleransi run hari ini.
+        longgar3 = ToleranceProfile.objects.get_or_create(
+            name="Longgar3", defaults={"date_window_days": 3}
+        )[0]
+        self._tx(self.panel, "depo", "50000", "50000", "D1", "p22",
+                 username="budi", dt=datetime(2026, 6, 22, 10, 0))
+        include = {"panel_dp": True, "panel_wd": True, "bracket": False,
+                   "bank": False, "gateway": False}
+        b22 = run_batch(self.lbs, longgar3, recon_date=date(2026, 6, 22),
+                        include=include)
+        self.assertFalse(b22.runs.filter(relation="panel_bank").exists())
+        # Panel 22 susulan + run 23 profil Default → hasil susulan ditulis ke
+        # run PANEL_BANK BARU di b22.
+        p22b = self._tx(self.panel, "depo", "60000", "60000", "D2", "p22b",
+                        username="andi", dt=datetime(2026, 6, 22, 22, 0))
+        self._tx(self.bank, "depo", "90000", "90000", "", "k9",
+                 username="rudi", dt=datetime(2026, 6, 23, 10, 0))
+        run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 23))
+        run_home = b22.runs.get(relation="panel_bank")
+        self.assertEqual(run_home.tolerance, longgar3)
+        self.assertEqual(
+            MatchResult.objects.get(left=p22b).run, run_home
+        )
+
+
 class RetroSusulanTests(_Base):
     """Baris SUSULAN: transaksi bertanggal D yang baru muncul di upload berikutnya,
     padahal batch tanggal D sudah ada → hasil & totalnya ditulis ke batch D."""
