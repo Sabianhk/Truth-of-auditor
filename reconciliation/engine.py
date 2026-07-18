@@ -6,7 +6,7 @@ dengan bucket cocok / tidak_cocok / perlu_tinjau + reason. Toleransi dari Tolera
 import logging
 import re
 from collections import Counter, defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.db import transaction as db_tx
 from django.db.models import Count, Q, Sum
@@ -208,11 +208,31 @@ def date_ok(left_dt, right_dt, tol):
     return 0 <= (right_dt.date() - left_dt.date()).days <= tol.date_window_days
 
 
-def _date_filter(qs, dfrom, dto):
+def _day_start(d):
+    """date → datetime naive 00:00 (USE_TZ=False, WIB). Basis filter sargable."""
+    return datetime.combine(d, time.min)
+
+
+def _date_range_q(field, dfrom=None, dto=None):
+    """Q rentang tanggal INKLUSIF [dfrom..dto] pada DateTimeField, bentuk SARGABLE:
+    `field >= dfrom 00:00 AND field < (dto+1) 00:00`.
+
+    Setara `__date__gte/__date__lte`, tapi `__date__` dikompilasi Postgres jadi
+    `(occurred_at)::date` sehingga index (source_type, occurred_at) tak terpakai
+    (seq-scan di 497rb+ baris). Perbandingan datetime polos memakai index.
+    String 'YYYY-MM-DD' dikoersi (CLI match mengirim string)."""
+    dfrom, dto = _as_date(dfrom), _as_date(dto)
+    q = Q()
     if dfrom:
-        qs = qs.filter(occurred_at__date__gte=dfrom)
+        q &= Q(**{f"{field}__gte": _day_start(dfrom)})
     if dto:
-        qs = qs.filter(occurred_at__date__lte=dto)
+        q &= Q(**{f"{field}__lt": _day_start(dto + timedelta(days=1))})
+    return q
+
+
+def _date_filter(qs, dfrom, dto):
+    if dfrom or dto:
+        qs = qs.filter(_date_range_q("occurred_at", dfrom, dto))
     return qs
 
 
@@ -695,7 +715,7 @@ def _retro_homes(toko, recon_date, date_from, date_to, include, exclude_ids=None
     Baris carried (punya hasil no_money lama) dikecualikan — jalurnya flip, bukan
     susulan. Tanggal tanpa batch → bukan susulan (diproses batch berjalan)."""
     qs = _consume_scope(toko, date_from, date_to, include).filter(
-        occurred_at__date__lt=recon_date
+        occurred_at__lt=_day_start(recon_date)
     )
     if exclude_ids:
         qs = qs.exclude(id__in=exclude_ids)
@@ -1099,7 +1119,7 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         pre_floor_orphans = set(
             _consume_scope(toko, date_from, date_to, include)
             .filter(source_type__key__in=_included_money_sources(include),
-                    occurred_at__date__lt=consume_floor)
+                    occurred_at__lt=_day_start(consume_floor))
             .exclude(id__in=used_rights)
             .exclude(id__in=set(retro))
             .values_list("id", flat=True)
@@ -1197,10 +1217,13 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         # 3) Yang masih menunggu settlement tetap AKTIF: carried dalam window yang
         #    belum settle + no_money BARU batch ini yang dalam window + panel
         #    susulan yang masih dalam window.
+        # __date__gt=X ⟺ __gte=midnight(X+1) — bentuk sargable (lihat _date_range_q).
         new_carry = MatchResult.objects.filter(
             run__batch=batch, bucket=MatchResult.Bucket.TIDAK, reason_code="no_money",
             left__isnull=False,
-            left__occurred_at__date__gt=recon_date - timedelta(days=window),
+            left__occurred_at__gte=_day_start(
+                recon_date - timedelta(days=window) + timedelta(days=1)
+            ),
         ).values_list("left_id", flat=True)
         expired_ids = {e["tx"] for e in expired}
         still_waiting = (
@@ -1212,7 +1235,8 @@ def run_batch(toko, tolerance=None, date_from=None, date_to=None, user=None, inc
         money_keys = _included_money_sources(include)
         cross_money = set(
             _consume_scope(toko, date_from, date_to, include)
-            .filter(source_type__key__in=money_keys, occurred_at__date__gt=recon_date)
+            .filter(source_type__key__in=money_keys,
+                    occurred_at__gte=_day_start(recon_date + timedelta(days=1)))
             .exclude(id__in=used_rights)
             .values_list("id", flat=True)
         )

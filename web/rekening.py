@@ -8,8 +8,10 @@ dengan breakdown FR (`_saldo_batas`) — kebal acak urutan. Sumber tanpa saldo
 (gateway QRIS, BCA PDF) → saldo & selisih "—".
 """
 from collections import Counter
+from datetime import timedelta
 from decimal import Decimal
 
+from reconciliation.engine import _day_start
 from transactions.models import Transaction
 from web.breakdown import _saldo_batas
 
@@ -21,7 +23,10 @@ def rekening_breakdown(toko, tanggal):
     """{"accounts": [per rekening], "total": agregat, "count": jumlah baris}."""
     rows = (
         Transaction.objects.filter(
-            toko=toko, source_type__key__in=MONEY_KEYS, occurred_at__date=tanggal
+            # rentang [00:00, 24:00) satu hari — sargable, setara __date=tanggal
+            toko=toko, source_type__key__in=MONEY_KEYS,
+            occurred_at__gte=_day_start(tanggal),
+            occurred_at__lt=_day_start(tanggal + timedelta(days=1)),
         )
         .select_related("source_type", "upload", "account", "upload__account")
         .order_by("occurred_at", "id")

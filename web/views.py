@@ -21,6 +21,7 @@ from django.views.decorators.http import require_POST
 
 from reconciliation.engine import (
     MATCHERS,
+    _day_start,
     _panel_dates,
     check_completeness,
     pending_settlement_count,
@@ -540,14 +541,18 @@ def transactions(request):
         from reconciliation.engine import _carried_results
 
         qs = qs.filter(id__in=list(_carried_results(active).keys()))
+    # Bentuk sargable (index occurred_at terpakai): __date__gte/lte dikompilasi
+    # (occurred_at)::date di Postgres → seq-scan. Lihat engine._date_range_q.
     try:
         if date_from:
-            qs = qs.filter(occurred_at__date__gte=date_cls.fromisoformat(date_from))
+            qs = qs.filter(occurred_at__gte=_day_start(date_cls.fromisoformat(date_from)))
     except ValueError:
         date_from = ""
     try:
         if date_to:
-            qs = qs.filter(occurred_at__date__lte=date_cls.fromisoformat(date_to))
+            qs = qs.filter(
+                occurred_at__lt=_day_start(date_cls.fromisoformat(date_to) + timedelta(days=1))
+            )
     except ValueError:
         date_to = ""
 
@@ -1140,15 +1145,18 @@ def review_queue(request):
     date_from = _parse_date(request.GET.get("from", ""))
     date_to = _parse_date(request.GET.get("to", ""))
     # Tanggal: sisi kredit; baris orphan (tanpa kiri) dinilai dari sisi uangnya.
+    # Bentuk sargable (bandingkan datetime polos, bukan ::date) — lihat engine.
     if date_from:
+        lo = _day_start(date_from)
         base = base.filter(
-            Q(left__occurred_at__date__gte=date_from)
-            | Q(left__isnull=True, right__occurred_at__date__gte=date_from)
+            Q(left__occurred_at__gte=lo)
+            | Q(left__isnull=True, right__occurred_at__gte=lo)
         )
     if date_to:
+        hi = _day_start(date_to + timedelta(days=1))
         base = base.filter(
-            Q(left__occurred_at__date__lte=date_to)
-            | Q(left__isnull=True, right__occurred_at__date__lte=date_to)
+            Q(left__occurred_at__lt=hi)
+            | Q(left__isnull=True, right__occurred_at__lt=hi)
         )
 
     # Hitungan tab DALAM flow+tanggal terpilih (angka jujur, pola run_detail).
@@ -1270,10 +1278,10 @@ def bank_mutations(request):
 
     date_from = _parse_date(request.GET.get("from", ""))
     date_to = _parse_date(request.GET.get("to", ""))
-    if date_from:
-        qs = qs.filter(occurred_at__date__gte=date_from)
+    if date_from:  # bentuk sargable — lihat engine._date_range_q
+        qs = qs.filter(occurred_at__gte=_day_start(date_from))
     if date_to:
-        qs = qs.filter(occurred_at__date__lte=date_to)
+        qs = qs.filter(occurred_at__lt=_day_start(date_to + timedelta(days=1)))
 
     # Dropdown per-file: upload sumber uang toko aktif, IKUT tombol sumber
     # (Bank → hanya file bank; Gateway QRIS → hanya file gateway).
@@ -1543,9 +1551,10 @@ def rekening_breakdown(request):
     active = _active_toko(request)
     if active is None:
         return render(request, "web/no_toko.html")
-    latest = Transaction.objects.filter(
+    latest_dt = Transaction.objects.filter(
         toko=active, source_type__key__in=("bank", "gateway")
-    ).aggregate(m=Max("occurred_at__date"))["m"]
+    ).aggregate(m=Max("occurred_at"))["m"]
+    latest = latest_dt.date() if latest_dt else None  # Max datetime ≡ Max ::date
     tanggal = _parse_date(request.GET.get("date", "")) or latest or date_cls.today()
     data = hitung_rekening_breakdown(active, tanggal)
     return render(request, "web/rekening.html", {
