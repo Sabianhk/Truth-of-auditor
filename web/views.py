@@ -39,6 +39,7 @@ from sources.models import SourceType, Upload
 from sources.services import PARSERS, ingest, is_encrypted_xlsx
 from transactions.models import Transaction, specific_source_label
 from web.access import is_admin, tokos_for
+from web.batchno import batch_no as _batch_no, batch_no_map, batch_no_map_multi
 from web.biaya import rincian_biaya as hitung_rincian_biaya
 from web.exports import xlsx_safe
 from web.breakdown import bracket_breakdown as hitung_bracket_breakdown, KATEGORI_KANONIK
@@ -192,10 +193,12 @@ def dashboard(request):
         else:
             tot = selisih(b)
             st = "ok" if tot == 0 else ("warn" if tot < 10_000_000 else "bad")
-        kal.append({
-            "d": d, "batch": b, "st": st, "today": d == today,
-            "no": (ReconBatch.objects.filter(toko=active, id__lte=b.id).count() if b else None),
-        })
+        kal.append({"d": d, "batch": b, "st": st, "today": d == today, "no": None})
+    # nomor batch per-toko: SATU query utk semua sel kalender (bukan 14 COUNT)
+    kal_nos = batch_no_map(active, [c["batch"].id for c in kal if c["batch"]])
+    for c in kal:
+        if c["batch"]:
+            c["no"] = kal_nos.get(c["batch"].id)
 
     # --- tren selisih 30 hari kalender terakhir (bar DP/WD + garis total) ---
     tren_cutoff = anchor - timedelta(days=29)
@@ -755,9 +758,9 @@ def reconcile(request):
         for er in res["errors"]:
             messages.error(request, f"{er['date'].strftime('%d/%m/%Y')}: {er['message']}")
         batches, skipped = res["batches"], res["skipped_existing"]
+        nos = batch_no_map(active, [b.id for b in batches])
         for b in batches:
-            no = ReconBatch.objects.filter(toko=active, id__lte=b.id).count()
-            catat(request.user, "reconcile", f"Batch #{no}", toko=active, batch_pk=b.pk)
+            catat(request.user, "reconcile", f"Batch #{nos[b.id]}", toko=active, batch_pk=b.pk)
         if len(batches) == 1 and not skipped:
             no = ReconBatch.objects.filter(toko=active).count()
             messages.success(request, f"Rekonsiliasi selesai (Batch #{no}).")
@@ -820,17 +823,17 @@ def reconcile(request):
 @login_required
 def batch_detail(request, pk):
     batch = get_object_or_404(ReconBatch, pk=pk, toko__in=tokos_for(request.user))
-    batch_no = ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count()
+    batch_no = _batch_no(batch)
     # Settle terlambat dua arah — dari queryset LIVE (bukan summary JSON) supaya
     # otomatis kosong bila batch pasangannya sudah dihapus.
     resolved_here = list(
         MatchResult.objects.filter(resolved_by_batch=batch)
         .select_related("left", "right", "run__batch")
     )
-    for r in resolved_here:  # nomor batch asal (konvensi nomor per-toko)
-        r.home_no = ReconBatch.objects.filter(
-            toko=batch.toko, id__lte=r.run.batch_id
-        ).count()
+    # nomor batch asal (konvensi nomor per-toko) — satu query utk semua baris
+    home_nos = batch_no_map(batch.toko, [r.run.batch_id for r in resolved_here])
+    for r in resolved_here:
+        r.home_no = home_nos.get(r.run.batch_id)
     settled_elsewhere = list(
         MatchResult.objects.filter(run__batch=batch, resolved_by_batch__isnull=False)
         .select_related("resolved_by_batch", "left", "right")
@@ -913,7 +916,7 @@ def batch_uang(request, pk):
     from reconciliation.engine import _operator_names, classify_unmatched_money
 
     batch = get_object_or_404(ReconBatch, pk=pk, toko__in=tokos_for(request.user))
-    batch_no = ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count()
+    batch_no = _batch_no(batch)
     # Pasangan DITOLAK (bucket TIDAK) bukan pasangan — lihat batch_detail.
     paired = MatchResult.objects.filter(
         left__isnull=False, right_id=OuterRef("id")
@@ -1087,9 +1090,7 @@ def run_detail(request, pk):
     orphan_label = f"Tidak Ada di {left_label}"
     # Nomor batch per-toko (posisi urut, bukan pk global) — konsisten dgn batch_detail.
     batch = run.batch
-    batch_no = (
-        ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count() if batch else None
-    )
+    batch_no = _batch_no(batch)
     # Cangkang (F1-B): summary run mengklaim hasil tapi MatchResult sudah tak ada.
     rs = run.summary or {}
     claimed = sum(v for v in rs.values() if isinstance(v, (int, float)))
@@ -1201,12 +1202,13 @@ def review_queue(request):
     )
 
     page = Paginator(qs, 40).get_page(request.GET.get("page"))
-    # nomor batch per-toko untuk tiap hasil di halaman ini
+    # nomor batch per-toko untuk tiap hasil di halaman ini — SATU query,
+    # bukan satu COUNT per baris (40×/halaman).
+    home_nos = batch_no_map(
+        active, [r.run.batch_id for r in page.object_list if r.run.batch_id]
+    )
     for r in page.object_list:
-        b = r.run.batch
-        r.home_no = (
-            ReconBatch.objects.filter(toko=active, id__lte=b.id).count() if b else None
-        )
+        r.home_no = home_nos.get(r.run.batch_id)
     return render(request, "web/review_queue.html", {
         "page": page, "active_toko": active,
         "bucket": bucket, "tab_counts": tab_counts, "totals": totals,
@@ -1765,9 +1767,7 @@ def review(request, pk):
         refresh_batch_summary(r.run.batch)
     show_run_col = request.POST.get("show_run_col") == "1"
     if show_run_col and r.run.batch:
-        r.home_no = ReconBatch.objects.filter(
-            toko=r.run.batch.toko, id__lte=r.run.batch_id
-        ).count()
+        r.home_no = _batch_no(r.run.batch)
     return render(request, "web/_result_row.html", {
         "r": r, "bucket_meta": BUCKET_META, "show_run_col": show_run_col,
         "hide_left": request.POST.get("hide_left") == "1",
@@ -1880,15 +1880,15 @@ def export_center(request):
         )
         return redirect("export_center")
 
-    # nomor batch per-toko (konsisten dgn batch_detail) tanpa N query per batch
-    def batch_no(b):
-        return ReconBatch.objects.filter(toko=b.toko, id__lte=b.id).count()
+    # nomor batch per-toko (konsisten dgn batch_detail): satu query id per toko
+    # terlibat — bukan satu COUNT per batch (dulu ≤200 query di bulk).
+    nos = batch_no_map_multi(batches.values_list("id", "toko_id"))
 
     catat(request.user, "export_batch", f"{n} batch ({scope_label})")
 
     if n == 1:
         b = batches[0]
-        wb = build_batch_workbook(b, batch_no(b), REL_LABELS)
+        wb = build_batch_workbook(b, nos[b.id], REL_LABELS)
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -1900,7 +1900,7 @@ def export_center(request):
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
         for b in batches.iterator():
-            wb = build_batch_workbook(b, batch_no(b), REL_LABELS)
+            wb = build_batch_workbook(b, nos[b.id], REL_LABELS)
             inner = io.BytesIO()
             wb.save(inner)
             zf.writestr(batch_filename(b), inner.getvalue())

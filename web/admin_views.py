@@ -16,12 +16,8 @@ from reconciliation.models import MatchResult, MatchRun, ReconBatch
 from sources.models import Toko, Upload
 from transactions.models import Transaction
 from web.access import admin_required
+from web.batchno import batch_no as _batch_no
 from web.views import _active_toko, _parse_date
-
-
-def _batch_no(batch):
-    """Nomor batch per-toko posisional (bukan pk) — konsisten dgn view lain."""
-    return ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count()
 
 
 def _locking_batches(upload):
@@ -375,7 +371,7 @@ def bulk_delete_uploads(request):
 def delete_batch(request, pk):
     batch = get_object_or_404(ReconBatch, pk=pk)
     if request.method == "POST":
-        no = ReconBatch.objects.filter(toko=batch.toko, id__lte=batch.id).count()
+        no = _batch_no(batch)
         n_runs = batch.runs.count()
         toko = batch.toko
         with transaction.atomic():
