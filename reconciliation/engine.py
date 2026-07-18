@@ -441,6 +441,15 @@ class _MoneyMatcher:
                                    score=score, reason_code=reason, reason_detail=detail))
 
         # --- pass 0: ticket-join gateway (seperti Panel↔Bracket) ---
+        # W7-5 — KEPUTUSAN (disengaja, jangan "diperbaiki"): join TX-ID /
+        # reference PERSIS di pass 0/0b TIDAK menghormati window tanggal —
+        # termasuk baris CARRIED yang sudah lewat window batch asalnya (panel
+        # D27 window 1 tetap boleh settle ke tiket sama D29). TX-ID dibuat
+        # gateway dan hadir di KEDUA sisi = identitas uang pasti; menolaknya
+        # karena window berarti auditor kehilangan settle sah dan baris malah
+        # kadaluarsa palsu. Window hanya membatasi pencocokan FUZZY/nominal
+        # (pass 1-3) yang bisa salah pasang. Dikunci tes
+        # TicketPersisTembusWindowTests (tests_carry).
         # W1-7a: di antara duplikat ber-ticket sama, nominal PERSIS menang
         # (fallback selisih terkecil) — urutan insert arbitrer, duplikat salah
         # nominal tidak boleh mengalahkan kandidat yang persis.

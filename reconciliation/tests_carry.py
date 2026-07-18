@@ -666,3 +666,31 @@ class RetroWindowAsalTests(_Base):
         self.assertEqual(r.bucket, MatchResult.Bucket.TIDAK)
         p2.refresh_from_db()
         self.assertEqual(p2.consumed_by_batch, b27)  # kadaluarsa ke home
+
+
+class TicketPersisTembusWindowTests(_Base):
+    """W7-5 (keputusan didokumentasikan): pass 0/0b — join TX-ID/reference
+    PERSIS — sengaja menembus window carried. TX-ID dibuat gateway dan hadir
+    di kedua sisi = identitas uang pasti; menolak karena window = auditor
+    kehilangan settle sah (baris kadaluarsa palsu). Window hanya membatasi
+    pencocokan fuzzy/nominal yang bisa salah pasang."""
+
+    def test_carried_lewat_window_ticket_persis_tetap_settle(self):
+        # Panel malam 27 ber-TX-ID gateway; batch 27 profil window 1.
+        p = self._tx(self.panel, "depo", "50000", "50000", "D1761515", "p1",
+                     username="budi", dt=datetime(2026, 6, 27, 21, 0))
+        self._tx(self.bank, "depo", "70000", "70000", "", "k1", username="siti")
+        b27 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 27))
+        # Uang gateway TX-ID SAMA baru muncul di run 29 — D+2, LEWAT window 1.
+        uang = self._tx(self.gateway, "depo", "50000", "50000", "D1761515", "g1",
+                        dt=datetime(2026, 6, 29, 1, 0))
+        b29 = run_batch(self.lbs, self.tol, recon_date=date(2026, 6, 29))
+        r = MatchResult.objects.get(run__batch=b27, left=p)
+        self.assertEqual(r.bucket, MatchResult.Bucket.COCOK)  # BUKAN kadaluarsa
+        self.assertEqual(r.right, uang)
+        self.assertEqual(r.reason_code, "late_settlement")
+        self.assertEqual(r.resolved_by_batch, b29)
+        p.refresh_from_db()
+        uang.refresh_from_db()
+        self.assertEqual(p.consumed_by_batch, b27)   # pulang ke batch asalnya
+        self.assertEqual(uang.consumed_by_batch, b29)
