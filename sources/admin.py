@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from reconciliation.admin import NoDeleteAdmin
+from reconciliation.admin import NoDeleteAdmin, ViewOnlyAdmin
 
 from .models import Account, ColumnTemplate, SourceType, Toko, Upload
 
@@ -13,12 +13,14 @@ class TokoAdmin(admin.ModelAdmin):
 
 
 @admin.register(SourceType)
-class SourceTypeAdmin(admin.ModelAdmin):
+class SourceTypeAdmin(NoDeleteAdmin):
+    # W6-7b: delete CASCADE ColumnTemplate seed -> parser rusak senyap.
     list_display = ("name", "key", "is_money_source")
 
 
 @admin.register(Account)
-class AccountAdmin(admin.ModelAdmin):
+class AccountAdmin(NoDeleteAdmin):
+    # W6-7b: delete SET_NULL Transaction.account -> grouping rekening berubah senyap.
     list_display = ("provider", "name", "kind", "flow", "account_no", "is_active")
     list_filter = ("kind", "provider", "flow", "is_active")
     search_fields = ("name", "account_no", "provider")
@@ -34,9 +36,10 @@ class ColumnTemplateAdmin(admin.ModelAdmin):
 
 
 @admin.register(Upload)
-class UploadAdmin(NoDeleteAdmin):
+class UploadAdmin(ViewOnlyAdmin):
     # Hapus hanya lewat UI aplikasi (guard _locking_batches + audit trail);
     # delete admin membypass guard integritas → bukti rekonsiliasi lenyap.
+    # W6-7a: view-only penuh — bukti finansial tak boleh diedit/dibuat manual.
     list_display = (
         "original_name", "source_type", "account", "flow", "recon_date",
         "status", "rows_parsed", "rows_duplicate", "created_at",

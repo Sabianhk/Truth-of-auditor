@@ -67,6 +67,45 @@ class DeleteUploadTests(TestCase):
         self.assertContains(r, 'id="chkAll"')
 
 
+class BulkDeletePasanganDuplikatTests(TestCase):
+    """W6-7d: bulk delete memproses urut id MENURUN — pasangan duplikat
+    (pemilik baris + pemegang link M2M dipilih bersama) selesai SATU klik:
+    pemegang link (upload lebih baru) dihapus dulu, pemiliknya bebas."""
+
+    def setUp(self):
+        from datetime import datetime
+        from decimal import Decimal
+
+        self.lbs = Toko.objects.get(key="lbs")
+        User.objects.create_user("adm", password="pw123456", role="admin")
+        self.client.login(username="adm", password="pw123456")
+        self.client.post(reverse("set_toko"), {"toko_id": self.lbs.id})
+        st = SourceType.objects.get_or_create(key="bank", defaults={"name": "Bank"})[0]
+        self.owner = Upload.objects.create(
+            source_type=st, toko=self.lbs, original_name="jun-01-15.csv"
+        )
+        tx = Transaction.objects.create(
+            upload=self.owner, source_type=st, toko=self.lbs, jenis="depo",
+            amount=Decimal("1"), money_delta=Decimal("1"),
+            occurred_at=datetime(2026, 6, 27, 10, 0), row_hash="dup-1",
+        )
+        self.holder = Upload.objects.create(
+            source_type=st, toko=self.lbs, original_name="jun-01-30.csv"
+        )
+        self.holder.duplicate_transactions.add(tx)
+
+    def test_pasangan_duplikat_terhapus_satu_klik(self):
+        r = self.client.post(reverse("bulk_delete_uploads"), {
+            "upload_ids": [str(self.owner.pk), str(self.holder.pk)],
+        })
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(Upload.objects.filter(pk=self.holder.pk).exists())
+        self.assertFalse(
+            Upload.objects.filter(pk=self.owner.pk).exists(),
+            "pemilik harus ikut terhapus di klik yang sama (urutan -id)",
+        )
+
+
 class DeleteBatchTests(TestCase):
     def setUp(self):
         from reconciliation.engine import run_batch

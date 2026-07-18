@@ -332,7 +332,14 @@ def bulk_delete_uploads(request):
     if request.method == "POST":
         active = _active_toko(request)
         ids = [i for i in request.POST.getlist("upload_ids") if i.isdecimal()]
-        ups = list(Upload.objects.filter(pk__in=ids, toko=active)) if active else []
+        # W6-7d: proses urut id MENURUN — pasangan duplikat (pemilik baris +
+        # pemegang link M2M dipilih bersama) selesai SATU klik: pemegang link
+        # (upload lebih baru) dihapus dulu, baru pemiliknya bebas dari guard
+        # _shared_duplicate_uploads.
+        ups = (
+            list(Upload.objects.filter(pk__in=ids, toko=active).order_by("-id"))
+            if active else []
+        )
         n_file = n_tx = 0
         dilewati = []
         terhapus = []

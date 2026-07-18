@@ -1,14 +1,15 @@
 from django.contrib import admin
 
-from reconciliation.admin import NoDeleteAdmin
+from reconciliation.admin import ViewOnlyAdmin
 
 from .models import Transaction
 
 
 @admin.register(Transaction)
-class TransactionAdmin(NoDeleteAdmin):
+class TransactionAdmin(ViewOnlyAdmin):
     # Hapus hanya lewat UI aplikasi (hapus upload/batch dgn guard integritas);
     # delete admin membypass guard + M2M duplikat lintas upload.
+    # W6-7a: view-only penuh — bukti finansial tak boleh diedit/dibuat manual.
     list_display = (
         "occurred_at", "source_type", "jenis", "amount",
         "username", "ticket_no", "reference", "is_duplicate",
