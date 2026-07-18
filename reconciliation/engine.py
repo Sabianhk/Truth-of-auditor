@@ -5,6 +5,7 @@ dengan bucket cocok / tidak_cocok / perlu_tinjau + reason. Toleransi dari Tolera
 """
 import logging
 import re
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
@@ -403,6 +404,31 @@ class _MoneyMatcher:
         panel_tickets = {p.ticket_no for p in left if p.ticket_no}
         panel_refs = {p.reference for p in left if p.reference}
 
+        # W4-5a: indeks nominal per arah utk pass 2 — rentang [amt-tol, amt+tol]
+        # via bisect, bukan scan linear SEMUA kunci bidx per baris panel
+        # (O(sisa × distinct nominal)). Urutan kunci hasil HARUS identik dgn
+        # urutan insersi bidx (pemenang tie skor pass 2 = kandidat pertama),
+        # maka posisi insersi disimpan dan subset bisect diurutkan menurutnya.
+        amt_sorted = {True: [], False: []}
+        amt_order = {True: [], False: []}
+        for i, (a, s) in enumerate(bidx):
+            amt_sorted[s].append((a, i))
+        for s in (True, False):
+            amt_sorted[s].sort()
+            amt_order[s] = [i for _, i in amt_sorted[s]]
+            amt_sorted[s] = [a for a, _ in amt_sorted[s]]
+
+        # W4-5b: memo skor identitas — pass 3 menilai ulang pasangan yang sudah
+        # diskor pass 1/2. _identity murni per (p, b) → hasil identik, sekali hitung.
+        ident_memo = {}
+
+        def identity(p, b):
+            k = (p.id, b.id)
+            s = ident_memo.get(k)
+            if s is None:
+                s = ident_memo[k] = self._identity(p, b)
+            return s
+
         def emit(p, b, bucket, score, reason, detail=""):
             matched.add(p.id)
             if b is not None:
@@ -467,8 +493,13 @@ class _MoneyMatcher:
                 pchan = p._chan = _panel_channel(p)
             amt, pos = int(abs(p.money_delta)), p.money_delta > 0
             if tol_amt:
-                keys = [(a, s) for (a, s) in bidx
-                        if s == pos and 0 < abs(a - amt) <= tol_amt]
+                arr, order = amt_sorted[pos], amt_order[pos]
+                lo_i = bisect_left(arr, amt - tol_amt)
+                hi_i = bisect_right(arr, amt + tol_amt)
+                sel = sorted(
+                    (order[j], arr[j]) for j in range(lo_i, hi_i) if arr[j] != amt
+                )
+                keys = [(a, pos) for _, a in sel]
             else:
                 keys = [(amt, pos)]
             for key in keys:
@@ -493,7 +524,7 @@ class _MoneyMatcher:
                 continue
             expected = _expected_owner(p)
             for b, delta in kandidat(p):
-                s = self._identity(p, b)
+                s = identity(p, b)
                 if s >= tol.fuzzy_threshold:
                     route = _route_ok(expected, owners.get(b.upload_id), b.source_type.key)
                     pairs.append((s, route is True, -delta, p, b))
@@ -510,7 +541,7 @@ class _MoneyMatcher:
             amt = int(abs(p.money_delta))
             best = None
             for b, delta in kandidat(p, tol_amt=max(2500, amt // 100)):
-                s = self._identity(p, b)
+                s = identity(p, b)
                 if s >= tol.fuzzy_threshold and (best is None or s > best[0]):
                     best = (s, b)
             if best:
@@ -524,7 +555,7 @@ class _MoneyMatcher:
                      f"identitas cocok, selisih nominal {diff:,} (indikasi fee)")
                 continue
             for b, delta in kandidat(p, lo=-1, hi=-1):
-                s = self._identity(p, b)
+                s = identity(p, b)
                 if s >= tol.fuzzy_threshold:
                     emit(p, b, MatchResult.Bucket.TINJAU, s, "date_before",
                          "uang tiba sehari SEBELUM tanggal panel")
@@ -544,7 +575,7 @@ class _MoneyMatcher:
             any_cand = False
             for b, delta in kandidat(p):
                 any_cand = True
-                s = self._identity(p, b)
+                s = identity(p, b)
                 if s >= NAME_REVIEW_FLOOR:
                     route = _route_ok(expected, owners.get(b.upload_id), b.source_type.key)
                     band_pairs.append((s, route is True, -delta, p, b))
